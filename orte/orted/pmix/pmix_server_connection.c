@@ -72,8 +72,7 @@
 
 static int usock_peer_send_blocking(pmix_server_peer_t* peer,
                                     int sd, void* data, size_t size);
-static bool usock_peer_recv_blocking(pmix_server_peer_t* peer,
-                                     int sd, void* data, size_t size);
+static bool usock_peer_recv_blocking(int sd, void* data, size_t size);
 
 int pmix_server_send_connect_ack(pmix_server_peer_t* peer)
 {
@@ -220,7 +219,7 @@ int pmix_server_recv_connect_ack(pmix_server_peer_t* pr, int sd,
     /* ensure all is zero'd */
     memset(&hdr, 0, sizeof(pmix_server_hdr_t));
 
-    if (usock_peer_recv_blocking(peer, sd, &hdr, sizeof(pmix_server_hdr_t))) {
+    if (usock_peer_recv_blocking(sd, &hdr, sizeof(pmix_server_hdr_t))) {
         if (NULL != peer) {
             /* If the peer state is CONNECT_ACK, then we were waiting for
              * the connection to be ack'd
@@ -241,6 +240,7 @@ int pmix_server_recv_connect_ack(pmix_server_peer_t* pr, int sd,
                             "%s unable to complete recv of connect-ack from %s ON SOCKET %d",
                             ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
                             (NULL == peer) ? "UNKNOWN" : ORTE_NAME_PRINT(&peer->name), sd);
+        CLOSE_THE_SOCKET(sd);
         return ORTE_ERR_UNREACH;
     }
     /* if the requestor wanted the header returned, then do so now */
@@ -329,7 +329,7 @@ int pmix_server_recv_connect_ack(pmix_server_peer_t* pr, int sd,
         CLOSE_THE_SOCKET(peer->sd);
         return ORTE_ERR_OUT_OF_RESOURCE;
     }
-    if (!usock_peer_recv_blocking(peer, sd, msg, hdr.nbytes)) {
+    if (!usock_peer_recv_blocking(sd, msg, hdr.nbytes)) {
         /* unable to complete the recv */
         opal_output_verbose(2, pmix_server_output,
                             "%s unable to complete recv of connect-ack from %s ON SOCKET %d",
@@ -420,89 +420,48 @@ void pmix_server_peer_connected(pmix_server_peer_t* peer)
     }
 }
 
+// TODO: MARK MOVING TO OPAL UTILS LAYER
+// TRY TO SHARE THIS CODE BETWEEN PMIX CLIENT AND SERVER!
+// THUS: make it independent from PMIx server specific data
 /*
  * A blocking recv on a non-blocking socket. Used to receive the small amount of connection
  * information that identifies the peers endpoint.
  */
-static bool usock_peer_recv_blocking(pmix_server_peer_t* peer,
-                                     int sd, void* data, size_t size)
+static bool usock_peer_recv_blocking(int fd, void* data, size_t size)
 {
     unsigned char* ptr = (unsigned char*)data;
     size_t cnt = 0;
 
-    opal_output_verbose(2, pmix_server_output,
-                        "%s waiting for connect ack from %s",
-                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                        (NULL == peer) ? "UNKNOWN" : ORTE_NAME_PRINT(&(peer->name)));
+    opal_output_verbose(2, pmix_server_output, "%s usock_peer_recv_blocking: start recv on fd = %d",
+                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), fd);
 
     while (cnt < size) {
-        int retval = recv(sd, (char *)ptr+cnt, size-cnt, 0);
+        int retval = recv(fd, (char *)ptr+cnt, size-cnt, 0);
 
         /* remote closed connection */
         if (retval == 0) {
             opal_output_verbose(2, pmix_server_output,
-                                "%s-%s usock_peer_recv_blocking: "
-                                "peer closed connection: peer state %d",
-                                ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                                (NULL == peer) ? "UNKNOWN" : ORTE_NAME_PRINT(&(peer->name)),
-                                (NULL == peer) ? 0 : peer->state);
-            peer->state = PMIX_SERVER_FAILED;
-            CLOSE_THE_SOCKET(peer->sd);
+                                "%s usock_peer_recv_blocking: peer closed connection on fd = %d",
+                                ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), fd );
             return false;
         }
 
         /* socket is non-blocking so handle errors */
         if (retval < 0) {
-            if (opal_socket_errno != EINTR && 
-                opal_socket_errno != EAGAIN && 
+            if (opal_socket_errno != EINTR &&
+                opal_socket_errno != EAGAIN &&
                 opal_socket_errno != EWOULDBLOCK) {
-                if (peer->state == PMIX_SERVER_CONNECT_ACK) {
-                    /* If we overflow the listen backlog, it's
-                       possible that even though we finished the three
-                       way handshake, the remote host was unable to
-                       transition the connection from half connected
-                       (received the initial SYN) to fully connected
-                       (in the listen backlog).  We likely won't see
-                       the failure until we try to receive, due to
-                       timing and the like.  The first thing we'll get
-                       in that case is a RST packet, which receive
-                       will turn into a connection reset by peer
-                       errno.  In that case, leave the socket in
-                       CONNECT_ACK and propogate the error up to
-                       recv_connect_ack, who will try to establish the
-                       connection again */
-                    opal_output_verbose(2, pmix_server_output,
-                                        "%s connect ack received error %s from %s",
-                                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                                        strerror(opal_socket_errno),
-                                        (NULL == peer) ? "UNKNOWN" : ORTE_NAME_PRINT(&(peer->name)));
-                    return false;
-                } else {
-                    opal_output(0, 
-                                "%s usock_peer_recv_blocking: "
-                                "recv() failed for %s: %s (%d)\n",
-                                ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                                (NULL == peer) ? "UNKNOWN" : ORTE_NAME_PRINT(&(peer->name)),
-                                strerror(opal_socket_errno),
-                                opal_socket_errno);
-                    if (NULL != peer) {
-                        peer->state = PMIX_SERVER_FAILED;
-                        CLOSE_THE_SOCKET(peer->sd);
-                    } else {
-                        CLOSE_THE_SOCKET(sd);
-                    }
-                    return false;
-                }
+                opal_output(0, "%s usock_peer_recv_blocking: recv() failed on fd = %d: %s (%d)\n",
+                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), fd,
+                            strerror(opal_socket_errno), opal_socket_errno);
+                return false;
             }
             continue;
         }
         cnt += retval;
     }
 
-    opal_output_verbose(2, pmix_server_output,
-                        "%s connect ack received from %s",
-                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                        (NULL == peer) ? "UNKNOWN" : ORTE_NAME_PRINT(&(peer->name)));
+    opal_output(0, "%s usock_peer_recv_blocking: recv() %u bytes on fd = %d\n",
+                ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), (int)size, fd);
     return true;
 }
-
