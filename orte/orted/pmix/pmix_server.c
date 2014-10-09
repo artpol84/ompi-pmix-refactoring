@@ -414,7 +414,7 @@ static void connection_handler(int incoming_sd, short flags, void* cbdata)
         if (NULL == (peer = pmix_server_peer_lookup(sd))) {
             /* create the peer */
             peer = OBJ_NEW(pmix_server_peer_t);
-            if (OPAL_SUCCESS != (rc = opal_hash_table_set_value_uint64(pmix_server_peers, sd, peer))) {
+            if ( OPAL_SUCCESS != pmix_server_peer_add(sd, peer) ) {
                 OPAL_ERROR_LOG(rc);
                 return;
             }
@@ -459,9 +459,8 @@ static void connection_handler(int incoming_sd, short flags, void* cbdata)
                         ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
                         ORTE_NAME_PRINT(&peer->name),
                         pmix_server_state_print(peer->state), peer->sd);
-            opal_hash_table_set_value_uint64(pmix_server_peers, sd, NULL);
-            CLOSE_THE_SOCKET(sd);
-            OBJ_RELEASE(peer);
+            pmix_server_peer_disconnect(peer);
+            pmix_server_peer_remove(sd);
         }
     }
 }
@@ -488,6 +487,50 @@ char* pmix_server_state_print(pmix_server_state_t state)
     }
 }
 
+int pmix_server_peer_add(int sd, pmix_server_peer_t *peer)
+{
+    uint64_t ui64 = sd;
+    return  opal_hash_table_set_value_uint64(pmix_server_peers, ui64, peer);
+}
+
+int pmix_server_peer_remove(int sd)
+{
+    int rc;
+    pmix_server_peer_t *peer = pmix_server_peer_lookup(sd);
+    uint64_t ui64 = sd;
+
+    if( peer == NULL ){
+        // Nothing to do. Warn about false remove!
+        opal_output_verbose(2, pmix_server_output,
+                            "%s pmix:server: WARNING pmix_server_peer_remove(%d) for nonexisting peer\n",
+                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), sd);
+        return OPAL_SUCCESS;
+    }
+    if( OPAL_SUCCESS != ( rc = opal_hash_table_remove_value_uint64(pmix_server_peers, ui64) ) ){
+        return rc;
+    }
+    OBJ_RELEASE(peer);
+    return OPAL_SUCCESS;
+}
+
+void pmix_server_peer_disconnect(pmix_server_peer_t* peer)
+{
+    // If the peer is in 'pmix_server_peers' hash table
+    // it will remain there in case it will try again
+    peer->state = PMIX_SERVER_UNCONNECTED;
+    if (peer->recv_ev_active) {
+        opal_event_del(&peer->recv_event);
+        peer->recv_ev_active = false;
+    }
+    if (peer->send_ev_active) {
+        opal_event_del(&peer->send_event);
+        peer->send_ev_active = false;
+    }
+    if (peer->sd >= 0) {
+        CLOSE_THE_SOCKET(peer->sd);
+        peer->sd = -1;
+    }
+}
 
 pmix_server_peer_t* pmix_server_peer_lookup(int sd)
 {
@@ -500,7 +543,6 @@ pmix_server_peer_t* pmix_server_peer_lookup(int sd)
     }
     return peer;
 }
-
 
 static pmix_server_trk_t* get_trk(opal_identifier_t *id,
                                   orte_grpcomm_signature_t *sig)

@@ -1604,7 +1604,6 @@ int pmix_server_peer_recv_connect_ack(pmix_server_peer_t* pr,
     opal_sec_cred_t creds;
     pmix_server_hdr_t hdr;
     pmix_server_peer_t *peer;
-    uint64_t *ui64;
     orte_process_name_t sender;
 
     opal_output_verbose(2, pmix_server_output,
@@ -1670,8 +1669,7 @@ int pmix_server_peer_recv_connect_ack(pmix_server_peer_t* pr,
             peer->sd = sd;
             peer->name = sender;
             peer->state = PMIX_SERVER_ACCEPTING;
-            ui64 = (uint64_t*)(&peer->name);
-            if (OPAL_SUCCESS != opal_hash_table_set_value_uint64(pmix_server_peers, (*ui64), peer)) {
+            if (OPAL_SUCCESS != pmix_server_peer_add(sd, peer) ) {
                 OBJ_RELEASE(peer);
                 CLOSE_THE_SOCKET(sd);
                 return ORTE_ERR_UNREACH;

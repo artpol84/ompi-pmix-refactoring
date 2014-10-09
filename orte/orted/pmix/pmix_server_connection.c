@@ -276,7 +276,7 @@ int pmix_server_recv_connect_ack(pmix_server_peer_t* pr, int sd,
             peer->name = sender;
             peer->state = PMIX_SERVER_ACCEPTING;
             peer->sd = sd;
-            if (OPAL_SUCCESS != opal_hash_table_set_value_uint64(pmix_server_peers, sd, peer)) {
+            if (OPAL_SUCCESS != pmix_server_peer_add(sd, peer) ) {
                 OBJ_RELEASE(peer);
                 CLOSE_THE_SOCKET(sd);
                 return ORTE_ERR_UNREACH;
