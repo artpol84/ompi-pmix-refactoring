@@ -193,8 +193,7 @@ extern int pmix_server_peer_recv_connect_ack(pmix_server_peer_t* pr,
 extern void pmix_server_recv_handler(int sd, short flags, void *cbdata);
 extern void pmix_server_peer_connected(pmix_server_peer_t* peer);
 extern int pmix_server_send_connect_ack(pmix_server_peer_t* peer);
-extern int pmix_server_recv_connect_ack(pmix_server_peer_t* pr, int sd,
-                                        pmix_server_hdr_t *dhdr);
+extern int pmix_server_recv_connect_ack(int sd, pmix_server_hdr_t *dhdr);
 extern void pmix_server_peer_event_init(pmix_server_peer_t* peer);
 extern char* pmix_server_state_print(pmix_server_state_t state);
 int pmix_server_peer_add(int sd, pmix_server_peer_t *peer);
