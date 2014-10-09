@@ -404,6 +404,7 @@ static void connection_handler(int incoming_sd, short flags, void* cbdata)
 
     /* get the handshake */
     if (ORTE_SUCCESS != (rc = pmix_server_recv_connect_ack(sd, &hdr))) {
+        CLOSE_THE_SOCKET(sd);
         ORTE_ERROR_LOG(rc);
         return;
     }

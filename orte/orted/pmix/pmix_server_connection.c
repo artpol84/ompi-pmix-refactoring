@@ -227,12 +227,13 @@ int pmix_server_recv_connect_ack(int sd, pmix_server_hdr_t *dhdr)
         peer = NULL;
     }
 
-    if (usock_peer_recv_blocking(sd, &hdr, sizeof(pmix_server_hdr_t))) {
+    if ( !usock_peer_recv_blocking(sd, &hdr, sizeof(pmix_server_hdr_t))) {
         /* unable to complete the recv */
         opal_output_verbose(2, pmix_server_output,
                             "%s pmix_server_recv_connect_ack(): fail to recv header from new peer on fd = %d\n",
                             ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), sd);
         rc = ORTE_ERR_UNREACH;
+        ORTE_ERROR_LOG(rc);
         goto err_exit;
     }
 
@@ -243,6 +244,7 @@ int pmix_server_recv_connect_ack(int sd, pmix_server_hdr_t *dhdr)
                             "%s pmix_server_recv_connect_ack(): invalid header type: %d on fd = %d\n",
                             ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), hdr.type, sd);
         rc = ORTE_ERR_UNREACH;
+        ORTE_ERROR_LOG(rc);
         goto err_exit;
     }
 
@@ -258,15 +260,17 @@ int pmix_server_recv_connect_ack(int sd, pmix_server_hdr_t *dhdr)
                             "%s pmix_server_recv_connect_ack(): out of memory\n",
                             ORTE_NAME_PRINT(ORTE_PROC_MY_NAME));
         rc = ORTE_ERR_OUT_OF_RESOURCE;
+        ORTE_ERROR_LOG(rc);
         goto err_exit;
     }
 
-    if (!usock_peer_recv_blocking(sd, msg, hdr.nbytes)) {
+    if ( !usock_peer_recv_blocking(sd, msg, hdr.nbytes) ) {
         opal_output_verbose(2, pmix_server_output,
                             "%s pmix_server_recv_connect_ack(): fail to recv"
                             " message body from %s on fd = %d\n",
                             ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), ORTE_NAME_PRINT(&sender), sd);
         rc = ORTE_ERR_UNREACH;
+        ORTE_ERROR_LOG(rc);
         goto err_exit;
     }
 
@@ -283,6 +287,7 @@ int pmix_server_recv_connect_ack(int sd, pmix_server_hdr_t *dhdr)
                             ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), ORTE_NAME_PRINT(&sender), sd,
                             version, opal_version_string);
         rc = ORTE_ERR_UNREACH;
+        ORTE_ERROR_LOG(rc);
         goto err_exit;
     }
 
@@ -297,6 +302,7 @@ int pmix_server_recv_connect_ack(int sd, pmix_server_hdr_t *dhdr)
     creds.credential = (char*)(msg + strlen(version) + 1);
     creds.size = hdr.nbytes - strlen(version) - 1;
     if (OPAL_SUCCESS != (rc = opal_sec.authenticate(&creds))) {
+        ORTE_ERROR_LOG(rc);
         goto err_exit;
     }
     free(msg);
@@ -308,12 +314,9 @@ int pmix_server_recv_connect_ack(int sd, pmix_server_hdr_t *dhdr)
     return ORTE_SUCCESS;
 
 err_exit:
-
     if( peer ){
         OBJ_RELEASE(peer);
     }
-    CLOSE_THE_SOCKET(sd);
-    ORTE_ERROR_LOG(rc);
     return rc;
 }
 
@@ -351,7 +354,7 @@ void pmix_server_peer_connected(pmix_server_peer_t* peer)
     }
 }
 
-// TODO: MARK MOVING TO OPAL UTILS LAYER
+// TODO: MARK MOVING TO OPAL UTILS
 // TRY TO SHARE THIS CODE BETWEEN PMIX CLIENT AND SERVER!
 // THUS: make it independent from PMIx server specific data
 /*
