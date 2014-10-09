@@ -372,14 +372,13 @@ static void connection_handler(int incoming_sd, short flags, void* cbdata)
     opal_socklen_t addrlen = sizeof(struct sockaddr);
     int sd, rc;
     pmix_server_hdr_t hdr;
-    pmix_server_peer_t *peer;
+    pmix_server_peer_t *peer = NULL;
 
     sd = accept(incoming_sd, (struct sockaddr*)&addr, &addrlen);
-    opal_output_verbose(2, pmix_server_output,
-                        "%s connection_event_handler: working connection "
-                        "(%d, %d)\n",
-                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                        sd, opal_socket_errno);
+    opal_output_verbose(2, pmix_server_output, "%s connection_handler [pmix server]: "
+                        "working connection (%d, %d)\n",
+                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), sd, opal_socket_errno);
+
     if (sd < 0) {
         if (EINTR == opal_socket_errno) {
             return;
@@ -395,75 +394,97 @@ static void connection_handler(int incoming_sd, short flags, void* cbdata)
                 ORTE_ERROR_LOG(ORTE_ERR_SYS_LIMITS_SOCKETS);
                 orte_show_help("help-orterun.txt", "orterun:sys-limit-sockets", true);
             } else {
-                opal_output(0, "pmix_server_accept: accept() failed: %s (%d).", 
+                opal_output(0, "%s connection_handler [pmix server]: accept() failed: %s (%d).\n",
+                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
                             strerror(opal_socket_errno), opal_socket_errno);
             }
         }
         return;
     }
 
+    // Sanity check: new fd should be in lookup table!
+    peer = pmix_server_peer_lookup(sd);
+    if (NULL != peer) {
+        opal_output_verbose(2, pmix_server_output,
+                            "%s connection_handler [pmix server]: WARNING!"
+                            " Newly allocated fd = %d is already in the pmix_server_peers.\n"
+                            "This shouldn't happen and might be dangerous.",
+                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), sd);
+        // Peer might have active send/receive events but we can't call
+        // pmix_server_peer_remove since sd is a new descriptor and it will be closed!
+        // Do dirty workaround. Maybe we should error exit?
+        pmix_server_peer_remove(sd);
+        peer = NULL;
+    }
+
     /* get the handshake */
     if (ORTE_SUCCESS != (rc = pmix_server_recv_connect_ack(sd, &hdr))) {
-        CLOSE_THE_SOCKET(sd);
         ORTE_ERROR_LOG(rc);
-        return;
+        goto err_exit;
     }
 
-    /* finish processing ident */
-    if (PMIX_USOCK_IDENT == hdr.type) {
-        /* get the peer */
-        if (NULL == (peer = pmix_server_peer_lookup(sd))) {
-            /* create the peer */
-            peer = OBJ_NEW(pmix_server_peer_t);
-            if ( OPAL_SUCCESS != pmix_server_peer_add(sd, peer) ) {
-                OPAL_ERROR_LOG(rc);
-                return;
-            }
-            memcpy(&peer->name, &hdr.id, sizeof(opal_identifier_t));
-            peer->state = PMIX_SERVER_ACCEPTING;
-            peer->sd = sd;
-        }
-        /* set socket up to be non-blocking */
-        if ((flags = fcntl(sd, F_GETFL, 0)) < 0) {
-            opal_output(0, "%s pmix_server_recv_connect: fcntl(F_GETFL) failed: %s (%d)",
+    /* set socket up to be non-blocking */
+    if ((flags = fcntl(sd, F_GETFL, 0)) < 0) {
+        opal_output(0, "%s connection_handler [pmix server]: fcntl(F_GETFL) failed: %s (%d)\n",
+                    ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), strerror(opal_socket_errno), opal_socket_errno);
+            // TODO: Shouldn't we error exit here?
+    } else {
+        flags |= O_NONBLOCK;
+        if (fcntl(sd, F_SETFL, flags) < 0) {
+            opal_output(0, "%s connection_handler [pmix server]: fcntl(F_SETFL) failed: %s (%d)\n",
                         ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), strerror(opal_socket_errno), opal_socket_errno);
-        } else {
-            flags |= O_NONBLOCK;
-            if (fcntl(sd, F_SETFL, flags) < 0) {
-                opal_output(0, "%s pmix_server_recv_connect: fcntl(F_SETFL) failed: %s (%d)",
-                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), strerror(opal_socket_errno), opal_socket_errno);
-            }
-        }
-
-        /* is the peer instance willing to accept this connection */
-        peer->sd = sd;
-        if (peer->state != PMIX_SERVER_CONNECTED) {
-            pmix_server_peer_event_init(peer);
-
-            if (pmix_server_send_connect_ack(peer) != ORTE_SUCCESS) {
-                opal_output(0, "%s usock_peer_accept: "
-                            "usock_peer_send_connect_ack to %s failed\n",
-                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                            ORTE_NAME_PRINT(&(peer->name)));
-                peer->state = PMIX_SERVER_FAILED;
-                CLOSE_THE_SOCKET(sd);
-                return;
-            }
-
-            pmix_server_peer_connected(peer);
-            if (2 <= opal_output_get_verbosity(pmix_server_output)) {
-                pmix_server_peer_dump(peer, "accepted");
-            }
-        } else {
-            opal_output_verbose(2, pmix_server_output,
-                        "%s usock:peer_accept ignored for peer %s in state %s on socket %d",
-                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                        ORTE_NAME_PRINT(&peer->name),
-                        pmix_server_state_print(peer->state), peer->sd);
-            pmix_server_peer_disconnect(peer);
-            pmix_server_peer_remove(sd);
+            // TODO: Shouldn't we error exit here?
         }
     }
+
+    // Prepare peer structure
+    if( NULL == (peer = OBJ_NEW(pmix_server_peer_t) ) ){
+        rc = ORTE_ERR_OUT_OF_RESOURCE;
+        goto err_exit;
+    }
+    memcpy(&peer->name, &hdr.id, sizeof(opal_identifier_t));
+    peer->sd = sd;
+    sd = -1; // we don't want to close this fd through sd anymore
+
+    // Perform response steps
+    pmix_server_peer_event_init(peer);
+    if ( ORTE_SUCCESS != (rc = pmix_server_send_connect_ack(peer)) ) {
+        opal_output(0, "%s connection_handler [pmix server]: "
+                    "usock_peer_send_connect_ack( %s ) failed\n",
+                    ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
+                    ORTE_NAME_PRINT(&(peer->name)));
+        ORTE_ERROR_LOG(rc);
+        goto err_exit;
+    }
+    pmix_server_peer_connected(peer);
+
+    // Keep track about this peer
+    if ( OPAL_SUCCESS != (rc = pmix_server_peer_add(peer->sd, peer)) ) {
+        opal_output(0, "%s connection_handler [pmix server]: pmix_server_peer_add( %d, %s ) failed: %s (%d)\n",
+                    ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), peer->sd, ORTE_NAME_PRINT(&(peer->name)),
+                    strerror(opal_socket_errno), opal_socket_errno);
+        OPAL_ERROR_LOG(rc);
+        goto err_exit;
+    }
+
+    if (2 <= opal_output_get_verbosity(pmix_server_output)) {
+        pmix_server_peer_dump(peer, "accepted");
+    }
+    opal_output(0, "%s connection_handler [pmix server]: "
+                "opalpmix_server_peer_add(%d, %s), peer addr %p\n",
+                ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), peer->sd,
+                ORTE_NAME_PRINT(&(peer->name)), (void*)peer);
+    // successful return
+    return;
+err_exit:
+    if( peer != NULL ){
+        pmix_server_peer_disconnect(peer);
+        OBJ_RELEASE(peer);
+    }
+    if( sd >= 0 ){
+        CLOSE_THE_SOCKET(sd);
+    }
+    return;
 }
 
 char* pmix_server_state_print(pmix_server_state_t state)
