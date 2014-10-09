@@ -70,8 +70,7 @@
 
 #include "pmix_server_internal.h"
 
-static int usock_peer_send_blocking(pmix_server_peer_t* peer,
-                                    int sd, void* data, size_t size);
+static int usock_peer_send_blocking(int sd, void* data, size_t size);
 static bool usock_peer_recv_blocking(int sd, void* data, size_t size);
 
 int pmix_server_send_connect_ack(pmix_server_peer_t* peer)
@@ -82,8 +81,8 @@ int pmix_server_send_connect_ack(pmix_server_peer_t* peer)
     size_t sdsize;
     opal_sec_cred_t *cred;
 
-    opal_output_verbose(2, pmix_server_output,
-                        "%s SEND CONNECT ACK", ORTE_NAME_PRINT(ORTE_PROC_MY_NAME));
+    opal_output_verbose(2, pmix_server_output, "%s pmix_server_send_connect_ack(%s)",
+                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), ORTE_NAME_PRINT(&(peer->name)));
 
     /* send a handshake that includes our process identifier
      * to ensure we are talking to another OMPI process
@@ -103,7 +102,7 @@ int pmix_server_send_connect_ack(pmix_server_peer_t* peer)
     hdr.nbytes = strlen(orte_version_string) + 1 + cred->size;
 
     /* create a space for our message */
-    sdsize = (sizeof(hdr) + strlen(opal_version_string) + 1 + cred->size);
+    sdsize = (sizeof(hdr) + hdr.nbytes);
     if (NULL == (msg = (char*)malloc(sdsize))) {
         return ORTE_ERR_OUT_OF_RESOURCE;
     }
@@ -114,8 +113,7 @@ int pmix_server_send_connect_ack(pmix_server_peer_t* peer)
     memcpy(msg+sizeof(hdr), opal_version_string, strlen(opal_version_string));
     memcpy(msg+sizeof(hdr)+strlen(opal_version_string)+1, cred->credential, cred->size);
 
-
-    if (ORTE_SUCCESS != usock_peer_send_blocking(peer, peer->sd, msg, sdsize)) {
+    if (ORTE_SUCCESS != usock_peer_send_blocking(peer->sd, msg, sdsize)) {
         ORTE_ERROR_LOG(ORTE_ERR_UNREACH);
         return ORTE_ERR_UNREACH;
     }
@@ -154,32 +152,30 @@ void pmix_server_peer_event_init(pmix_server_peer_t* peer)
     }
 }
 
+// TODO: MARK MOVING TO OPAL UTILS
+// TRY TO SHARE THIS CODE BETWEEN PMIX CLIENT AND SERVER!
+// THUS: make it independent from PMIx server specific data
+
 /*
  * A blocking send on a non-blocking socket. Used to send the small amount of connection
  * information that identifies the peers endpoint.
  */
-static int usock_peer_send_blocking(pmix_server_peer_t* peer,
-                                    int sd, void* data, size_t size)
+static int usock_peer_send_blocking(int sd, void* data, size_t size)
 {
     unsigned char* ptr = (unsigned char*)data;
     size_t cnt = 0;
     int retval;
 
     opal_output_verbose(2, pmix_server_output,
-                        "%s send blocking of %"PRIsize_t" bytes to socket %d",
-                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                        size, sd);
+                        "%s usock_peer_send_blocking: of %"PRIsize_t" bytes to socket %d",
+                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), size, sd);
 
     while (cnt < size) {
         retval = send(sd, (char*)ptr+cnt, size-cnt, 0);
         if (retval < 0) {
             if (opal_socket_errno != EINTR && opal_socket_errno != EAGAIN && opal_socket_errno != EWOULDBLOCK) {
                 opal_output(0, "%s usock_peer_send_blocking: send() to socket %d failed: %s (%d)\n",
-                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), sd,
-                            strerror(opal_socket_errno),
-                            opal_socket_errno);
-                peer->state = PMIX_SERVER_FAILED;
-                CLOSE_THE_SOCKET(peer->sd);
+                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), sd, strerror(opal_socket_errno), opal_socket_errno);
                 return ORTE_ERR_UNREACH;
             }
             continue;
@@ -188,7 +184,7 @@ static int usock_peer_send_blocking(pmix_server_peer_t* peer,
     }
 
     opal_output_verbose(2, pmix_server_output,
-                        "%s blocking send complete to socket %d",
+                        "%s usock_peer_send_blocking: complete to socket %d",
                         ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), sd);
 
     return ORTE_SUCCESS;
@@ -395,7 +391,7 @@ static bool usock_peer_recv_blocking(int fd, void* data, size_t size)
         cnt += retval;
     }
 
-    opal_output(0, "%s usock_peer_recv_blocking: recv() %u bytes on fd = %d\n",
-                ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), (int)size, fd);
+    opal_output_verbose(2, pmix_server_output, "%s usock_peer_recv_blocking: recv() %"PRIsize_t" bytes on fd = %d\n",
+                ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), size, fd);
     return true;
 }
