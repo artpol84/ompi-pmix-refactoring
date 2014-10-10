@@ -72,6 +72,8 @@
 
 #include "pmix_server_internal.h"
 
+// Routines that actually work with UNIX sockets
+
 static int send_bytes(pmix_server_peer_t* peer)
 {
     pmix_server_send_t* msg = peer->send_msg;
@@ -80,35 +82,68 @@ static int send_bytes(pmix_server_peer_t* peer)
     while (0 < msg->sdbytes) {
         rc = write(peer->sd, msg->sdptr, msg->sdbytes);
         if (rc < 0) {
-            if (opal_socket_errno == EINTR) {
+            switch( opal_socket_errno ){
+            case EINTR:
                 continue;
-            } else if (opal_socket_errno == EAGAIN) {
-                /* tell the caller to keep this message on active,
-                 * but let the event lib cycle so other messages
-                 * can progress while this socket is busy
-                 */
-                return ORTE_ERR_RESOURCE_BUSY;
-            } else if (opal_socket_errno == EWOULDBLOCK) {
-                /* tell the caller to keep this message on active,
-                 * but let the event lib cycle so other messages
-                 * can progress while this socket is busy
-                 */
+            case EAGAIN:
+            case EWOULDBLOCK:
+                // Let event lib progress while this socket come to life
+                // Both errors will have the same effect, so join them
                 return ORTE_ERR_WOULD_BLOCK;
+            default:
+                // The error is serious and we cannot progress this message
+                opal_output(0, "%s [pmix server]: %s->%s write failed: %s (%d) [sd = %d]",
+                            __FUNCTION__, ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), ORTE_NAME_PRINT(&(peer->name)),
+                            strerror(opal_socket_errno), opal_socket_errno, peer->sd);
+                return ORTE_ERR_COMM_FAILURE;
             }
-            /* we hit an error and cannot progress this message */
-            opal_output(0, "%s->%s pmix_server_msg_send_bytes: write failed: %s (%d) [sd = %d]", 
-                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), 
-                        ORTE_NAME_PRINT(&(peer->name)), 
-                        strerror(opal_socket_errno),
-                        opal_socket_errno,
-                        peer->sd);
-            return ORTE_ERR_COMM_FAILURE;
         }
         /* update location */
         msg->sdbytes -= rc;
         msg->sdptr += rc;
     }
     /* we sent the full data block */
+    return ORTE_SUCCESS;
+}
+
+static int read_bytes(pmix_server_peer_t* peer)
+{
+    int rc;
+
+    /* read until all bytes recvd or error */
+    while (0 < peer->recv_msg->rdbytes) {
+        rc = read(peer->sd, peer->recv_msg->rdptr, peer->recv_msg->rdbytes);
+        if (rc < 0) {
+
+            switch( opal_socket_errno ){
+            case EINTR:
+                continue;
+            case EAGAIN:
+            case EWOULDBLOCK:
+                /* Let event lib progress while this socket come to life
+                 Both errors will have the same effect, so join them */
+                return ORTE_ERR_WOULD_BLOCK;
+            default:
+                /* The error is serious and we cannot progress this message */
+                opal_output(0, "%s [pmix server]: %s<-%s read failed: %s (%d) [sd = %d]",
+                            __FUNCTION__, ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), ORTE_NAME_PRINT(&(peer->name)),
+                            strerror(opal_socket_errno), opal_socket_errno, peer->sd);
+                return ORTE_ERR_COMM_FAILURE;
+            }
+         } else if (rc == 0)  {
+            /* the remote peer closed the connection - report that condition
+             and let the caller know */
+            opal_output(0, "%s [pmix server]: %s<-%s peer closed connection [sd = %d]",
+                        __FUNCTION__, ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
+                        ORTE_NAME_PRINT(&(peer->name)), peer->sd);
+            return ORTE_ERR_COMM_FAILURE;
+        }
+        /* we were able to read something, so adjust counters and location */
+        peer->recv_msg->rdbytes -= rc;
+        peer->recv_msg->rdptr += rc;
+    }
+
+    /* we read the full data block */
     return ORTE_SUCCESS;
 }
 
@@ -150,8 +185,7 @@ void pmix_server_send_handler(int sd, short flags, void *cbdata)
                         msg->sdbytes = msg->hdr.nbytes;
                     }
                     /* fall thru and let the send progress */
-                } else if (ORTE_ERR_RESOURCE_BUSY == rc ||
-                           ORTE_ERR_WOULD_BLOCK == rc) {
+                } else if (ORTE_ERR_RESOURCE_BUSY == rc) {
                     /* exit this event and let the event lib progress */
                     return;
                 } else {
@@ -173,8 +207,7 @@ void pmix_server_send_handler(int sd, short flags, void *cbdata)
                     OBJ_RELEASE(msg);
                     peer->send_msg = NULL;
                     /* fall thru to queue the next message */
-                } else if (ORTE_ERR_RESOURCE_BUSY == rc ||
-                           ORTE_ERR_WOULD_BLOCK == rc) {
+                } else if (ORTE_ERR_RESOURCE_BUSY == rc ) {
                     /* exit this event and let the event lib progress */
                     return;
                 } else {
@@ -221,65 +254,7 @@ void pmix_server_send_handler(int sd, short flags, void *cbdata)
     }
 }
 
-static int read_bytes(pmix_server_peer_t* peer)
-{
-    int rc;
 
-    /* read until all bytes recvd or error */
-    while (0 < peer->recv_msg->rdbytes) {
-        rc = read(peer->sd, peer->recv_msg->rdptr, peer->recv_msg->rdbytes);
-        if (rc < 0) {
-            if(opal_socket_errno == EINTR) {
-                continue;
-            } else if (opal_socket_errno == EAGAIN) {
-                /* tell the caller to keep this message on active,
-                 * but let the event lib cycle so other messages
-                 * can progress while this socket is busy
-                 */
-                return ORTE_ERR_RESOURCE_BUSY;
-            } else if (opal_socket_errno == EWOULDBLOCK) {
-                /* tell the caller to keep this message on active,
-                 * but let the event lib cycle so other messages
-                 * can progress while this socket is busy
-                 */
-                return ORTE_ERR_WOULD_BLOCK;
-            }
-            /* we hit an error and cannot progress this message - report
-             * the error back to the RML and let the caller know
-             * to abort this message
-             */
-            opal_output_verbose(2, pmix_server_output,
-                                "%s-%s pmix_server_msg_recv: readv failed: %s (%d)", 
-                                ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                                ORTE_NAME_PRINT(&(peer->name)),
-                                strerror(opal_socket_errno),
-                                opal_socket_errno);
-            // pmix_server_peer_close(peer);
-            // if (NULL != pmix_server.oob_exception_callback) {
-            // pmix_server.oob_exception_callback(&peer->name, ORTE_RML_PEER_DISCONNECTED);
-            //}
-            return ORTE_ERR_COMM_FAILURE;
-        } else if (rc == 0)  {
-            /* the remote peer closed the connection - report that condition
-             * and let the caller know
-             */
-            opal_output_verbose(2, pmix_server_output,
-                                "%s-%s pmix_server_msg_recv: peer closed connection", 
-                                ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                                ORTE_NAME_PRINT(&(peer->name)));
-            int sd = peer->sd;
-            pmix_server_peer_disconnect(peer);
-            pmix_server_peer_remove(sd);
-            return ORTE_ERR_WOULD_BLOCK;
-        }
-        /* we were able to read something, so adjust counters and location */
-        peer->recv_msg->rdbytes -= rc;
-        peer->recv_msg->rdptr += rc;
-    }
-
-    /* we read the full data block */
-    return ORTE_SUCCESS;
-}
 
 /* stuff proc attributes for sending back to a proc */
 static int stuff_proc_values(opal_buffer_t *reply, orte_job_t *jdata, orte_proc_t *proc)
@@ -1323,25 +1298,24 @@ void pmix_server_recv_handler(int sd, short flags, void *cbdata)
     int rc;
 
     opal_output_verbose(2, pmix_server_output,
-                        "%s:usock:recv:handler called for peer %s",
-                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                        ORTE_NAME_PRINT(&peer->name));
+                 "%s [pmix server]: called for peer %s [sd = %d]\n",
+                 __FUNCTION__, ORTE_NAME_PRINT(&(peer->name)), peer->sd);
 
     switch (peer->state) {
     case PMIX_SERVER_CONNECTED:
-        opal_output_verbose(2, pmix_server_output,
-                            "%s:usock:recv:handler CONNECTED",
-                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME));
+
         /* allocate a new message and setup for recv */
-        if (NULL == peer->recv_msg) {
-            opal_output_verbose(2, pmix_server_output,
-                                "%s:usock:recv:handler allocate new recv msg",
-                                ORTE_NAME_PRINT(ORTE_PROC_MY_NAME));
+        opal_output_verbose(2, pmix_server_output,
+                "%s [pmix server]: %s-%s allocate new recv msg [sd = %d]\n",
+                __FUNCTION__, ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
+                ORTE_NAME_PRINT(&(peer->name)), peer->sd);
+
             peer->recv_msg = OBJ_NEW(pmix_server_recv_t);
             if (NULL == peer->recv_msg) {
-                opal_output(0, "%s-%s pmix_server_peer_recv_handler: unable to allocate recv message\n",
-                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                            ORTE_NAME_PRINT(&(peer->name)));
+                opal_output_verbose(2, pmix_server_output,
+                        "%s [pmix server]: %s-%s unable to allocate recv message [sd = %d]\n",
+                        __FUNCTION__, ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
+                        ORTE_NAME_PRINT(&(peer->name)), peer->sd);
                 return;
             }
             /* start by reading the header */
@@ -1351,45 +1325,53 @@ void pmix_server_recv_handler(int sd, short flags, void *cbdata)
         /* if the header hasn't been completely read, read it */
         if (!peer->recv_msg->hdr_recvd) {
             opal_output_verbose(2, pmix_server_output,
-                                "%s:usock:recv:handler read hdr",
-                                ORTE_NAME_PRINT(ORTE_PROC_MY_NAME));
-            if (ORTE_SUCCESS == (rc = read_bytes(peer))) {
-                /* completed reading the header */
-                peer->recv_msg->hdr_recvd = true;
-                /* if this is a zero-byte message, then we are done */
-                if (0 == peer->recv_msg->hdr.nbytes) {
-                    opal_output_verbose(2, pmix_server_output,
-                                        "%s RECVD ZERO-BYTE MESSAGE FROM %s for tag %d",
-                                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                                        ORTE_NAME_PRINT(&peer->name), peer->recv_msg->hdr.tag);
-                    peer->recv_msg->data = NULL;  // make sure
-                    peer->recv_msg->rdptr = NULL;
-                    peer->recv_msg->rdbytes = 0;
+                    "%s [pmix server]: %s-%s read header [sd = %d]\n",
+                    __FUNCTION__, ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
+                    ORTE_NAME_PRINT(&(peer->name)), peer->sd);
+
+            rc = read_bytes(peer);
+            /* Process errors first (if any) */
+            if ( ORTE_SUCCESS != rc ) {
+                if (ORTE_ERR_RESOURCE_BUSY == rc ) {
+                    /* exit this event and let the event lib progress */
+                    return;
                 } else {
+                    /* close the connection */
                     opal_output_verbose(2, pmix_server_output,
-                                        "%s:usock:recv:handler allocate data region of size %lu",
-                                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), (unsigned long)peer->recv_msg->hdr.nbytes);
-                    /* allocate the data region */
-                    peer->recv_msg->data = (char*)malloc(peer->recv_msg->hdr.nbytes);
-                    /* point to it */
-                    peer->recv_msg->rdptr = peer->recv_msg->data;
-                    peer->recv_msg->rdbytes = peer->recv_msg->hdr.nbytes;
+                                        "%s [pmix server]: %s-%s unable to recv message header - closing connection [sd = %d]",
+                                        __FUNCTION__, ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
+                                        ORTE_NAME_PRINT(&(peer->name)), peer->sd);
+                    int sd = peer->sd;
+                    pmix_server_peer_disconnect(peer);
+                    pmix_server_peer_remove(sd);
+                    return;
                 }
-                /* fall thru and attempt to read the data */
-            } else if (ORTE_ERR_RESOURCE_BUSY == rc ||
-                       ORTE_ERR_WOULD_BLOCK == rc) {
-                /* exit this event and let the event lib progress */
-                return;
-            } else {
-                /* close the connection */
-                opal_output_verbose(2, pmix_server_output,
-                                    "%s:usock:recv:handler error reading bytes - closing connection",
-                                    ORTE_NAME_PRINT(ORTE_PROC_MY_NAME));
-                int sd = peer->sd;
-                pmix_server_peer_disconnect(peer);
-                pmix_server_peer_remove(sd);
-                return;
             }
+
+            /* completed reading the header */
+            peer->recv_msg->hdr_recvd = true;
+
+            /* if this is a zero-byte message, then we are done */
+            if (0 == peer->recv_msg->hdr.nbytes) {
+                opal_output_verbose(2, pmix_server_output,
+                        "%s [pmix server]: %s-%s RECVD ZERO-BYTE MESSAGE for tag %d [sd = %d]\n",
+                        __FUNCTION__, ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
+                        ORTE_NAME_PRINT(&(peer->name)), peer->recv_msg->hdr.tag, peer->sd);
+                peer->recv_msg->data = NULL;  // make sure
+                peer->recv_msg->rdptr = NULL;
+                peer->recv_msg->rdbytes = 0;
+            } else {
+                opal_output_verbose(2, pmix_server_output,
+                                    "%s [pmix server]: %s-%s allocate data region of size %lu [sd = %d]\n",
+                                    __FUNCTION__, ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
+                                    ORTE_NAME_PRINT(&(peer->name)), (unsigned long)peer->recv_msg->hdr.nbytes, peer->sd);
+                /* allocate the data region */
+                peer->recv_msg->data = (char*)malloc(peer->recv_msg->hdr.nbytes);
+                /* point to it */
+                peer->recv_msg->rdptr = peer->recv_msg->data;
+                peer->recv_msg->rdbytes = peer->recv_msg->hdr.nbytes;
+            }
+
         }
 
         if (peer->recv_msg->hdr_recvd) {
@@ -1400,23 +1382,22 @@ void pmix_server_recv_handler(int sd, short flags, void *cbdata)
             if (ORTE_SUCCESS == (rc = read_bytes(peer))) {
                 /* we recvd all of the message */
                 opal_output_verbose(2, pmix_server_output,
-                                    "%s RECVD COMPLETE MESSAGE FROM %s OF %d BYTES TAG %d",
-                                    ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                                    ORTE_NAME_PRINT((orte_process_name_t*)&(peer->recv_msg->hdr.id)),
-                                    (int)peer->recv_msg->hdr.nbytes,
-                                    peer->recv_msg->hdr.tag);
+                        "%s [pmix server]: %s<-%s COMPLETE RECVD OF %d BYTES, TAG %d [sd = %d]\n",
+                        __FUNCTION__, ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
+                        ORTE_NAME_PRINT((orte_process_name_t*)&(peer->recv_msg->hdr.id),
+                        (int)peer->recv_msg->hdr.nbytes, peer->recv_msg->hdr.tag, peer->sd);
                 /* process the message */
                 process_message(peer);
-            } else if (ORTE_ERR_RESOURCE_BUSY == rc ||
-                       ORTE_ERR_WOULD_BLOCK == rc) {
+            } else if (ORTE_ERR_RESOURCE_BUSY == rc ) {
                 /* exit this event and let the event lib progress */
                 return;
             } else {
-                // report the error
-                opal_output(0, "%s-%s pmix_server_peer_recv_handler: unable to recv message",
-                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                            ORTE_NAME_PRINT(&(peer->name)));
-                /* turn off the recv event */
+                /* report the error */
+                opal_output_verbose(2, pmix_server_output,
+                                    "%s [pmix server]: %s-%s unable to recv message body - closing connection [sd = %d]",
+                                    __FUNCTION__, ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
+                                    ORTE_NAME_PRINT(&(peer->name)), peer->sd);
+                /* shutdown */
                 int sd = peer->sd;
                 pmix_server_peer_disconnect(peer);
                 pmix_server_peer_remove(sd);
