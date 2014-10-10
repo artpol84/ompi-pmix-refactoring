@@ -70,97 +70,21 @@
 
 #include "pmix_server_internal.h"
 
-static int usock_peer_send_blocking(int sd, void* data, size_t size);
-static bool usock_peer_recv_blocking(int sd, void* data, size_t size);
-
-int pmix_server_send_connect_ack(pmix_server_peer_t* peer)
-{
-    char *msg;
-    pmix_server_hdr_t hdr;
-    int rc;
-    size_t sdsize;
-    opal_sec_cred_t *cred;
-
-    opal_output_verbose(2, pmix_server_output, "%s pmix_server_send_connect_ack(%s)",
-                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), ORTE_NAME_PRINT(&(peer->name)));
-
-    /* send a handshake that includes our process identifier
-     * to ensure we are talking to another OMPI process
-    */
-    memcpy(&hdr.id, ORTE_PROC_MY_NAME, sizeof(opal_identifier_t));
-    hdr.type = PMIX_USOCK_IDENT;
-    hdr.tag = UINT32_MAX;
-
-    /* get our security credential*/
-    if (OPAL_SUCCESS != (rc = opal_sec.get_my_credential(opal_dstore_internal,
-                                                         (opal_identifier_t*)ORTE_PROC_MY_NAME, &cred))) {
-        ORTE_ERROR_LOG(rc);
-        return rc;
-    }
-
-    /* set the number of bytes to be read beyond the header */
-    hdr.nbytes = strlen(orte_version_string) + 1 + cred->size;
-
-    /* create a space for our message */
-    sdsize = (sizeof(hdr) + hdr.nbytes);
-    if (NULL == (msg = (char*)malloc(sdsize))) {
-        return ORTE_ERR_OUT_OF_RESOURCE;
-    }
-    memset(msg, 0, sdsize);
-
-    /* load the message */
-    memcpy(msg, &hdr, sizeof(hdr));
-    memcpy(msg+sizeof(hdr), opal_version_string, strlen(opal_version_string));
-    memcpy(msg+sizeof(hdr)+strlen(opal_version_string)+1, cred->credential, cred->size);
-
-    if (ORTE_SUCCESS != usock_peer_send_blocking(peer->sd, msg, sdsize)) {
-        ORTE_ERROR_LOG(ORTE_ERR_UNREACH);
-        return ORTE_ERR_UNREACH;
-    }
-    return ORTE_SUCCESS;
-}
-
-/*
- * Initialize events to be used by the peer instance for USOCK select/poll callbacks.
- */
-void pmix_server_peer_event_init(pmix_server_peer_t* peer)
-{
-    if (peer->sd >= 0) {
-        opal_event_set(orte_event_base,
-                       &peer->recv_event,
-                       peer->sd,
-                       OPAL_EV_READ|OPAL_EV_PERSIST,
-                       pmix_server_recv_handler,
-                       peer);
-        opal_event_set_priority(&peer->recv_event, ORTE_MSG_PRI);
-        if (peer->recv_ev_active) {
-            opal_event_del(&peer->recv_event);
-            peer->recv_ev_active = false;
-        }
-        
-        opal_event_set(orte_event_base,
-                       &peer->send_event,
-                       peer->sd,
-                       OPAL_EV_WRITE|OPAL_EV_PERSIST,
-                       pmix_server_send_handler,
-                       peer);
-        opal_event_set_priority(&peer->send_event, ORTE_MSG_PRI);
-        if (peer->send_ev_active) {
-            opal_event_del(&peer->send_event);
-            peer->send_ev_active = false;
-        }
-    }
-}
-
+// ------------------------------------------------8<------------------------------------------------------//
 // TODO: MARK MOVING TO OPAL UTILS
 // TRY TO SHARE THIS CODE BETWEEN PMIX CLIENT AND SERVER!
 // THUS: make it independent from PMIx server specific data
+
+
+static int usock_send_blocking(int sd, void* data, size_t size);
+static bool usock_recv_blocking(int sd, void* data, size_t size);
+
 
 /*
  * A blocking send on a non-blocking socket. Used to send the small amount of connection
  * information that identifies the peers endpoint.
  */
-static int usock_peer_send_blocking(int sd, void* data, size_t size)
+static int usock_send_blocking(int sd, void* data, size_t size)
 {
     unsigned char* ptr = (unsigned char*)data;
     size_t cnt = 0;
@@ -191,173 +115,10 @@ static int usock_peer_send_blocking(int sd, void* data, size_t size)
 }
 
 /*
- *  Receive the peers globally unique process identification from a newly
- *  connected socket and verify the expected response. If so, move the
- *  socket to a connected state.
- */
-int pmix_server_recv_connect_ack(int sd, pmix_server_hdr_t *dhdr)
-{
-    char *msg = NULL;
-    char *version;
-    int rc;
-    opal_sec_cred_t creds;
-    pmix_server_peer_t *peer = NULL;
-    pmix_server_hdr_t hdr;
-    orte_process_name_t sender;
-
-    opal_output_verbose(2, pmix_server_output,
-                        "%s pmix_server_recv_connect_ack(): connect ack from new peer on fd = %d\n",
-                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), sd);
-
-    // ensure all is zero'd
-    memset(&hdr, 0, sizeof(pmix_server_hdr_t));
-
-    // Sanity check: sd should already be in peers hash table
-    peer = pmix_server_peer_lookup(sd);
-    if( peer != NULL ){
-        opal_output_verbose(2, pmix_server_output,
-                            "%s pmix_server_recv_connect_ack(): new fd = %d already in the hash table for peer %s.\n"
-                            "Will fix, but this situation is dangerous\n",
-                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), sd, ORTE_NAME_PRINT(&peer->name) );
-        pmix_server_peer_remove(sd);
-        peer = NULL;
-    }
-
-    if ( !usock_peer_recv_blocking(sd, &hdr, sizeof(pmix_server_hdr_t))) {
-        /* unable to complete the recv */
-        opal_output_verbose(2, pmix_server_output,
-                            "%s pmix_server_recv_connect_ack(): fail to recv header from new peer on fd = %d\n",
-                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), sd);
-        rc = ORTE_ERR_UNREACH;
-        ORTE_ERROR_LOG(rc);
-        goto err_exit;
-    }
-
-    *dhdr = hdr;
-
-    if (hdr.type != PMIX_USOCK_IDENT) {
-        opal_output_verbose(2, pmix_server_output,
-                            "%s pmix_server_recv_connect_ack(): invalid header type: %d on fd = %d\n",
-                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), hdr.type, sd);
-        rc = ORTE_ERR_UNREACH;
-        ORTE_ERROR_LOG(rc);
-        goto err_exit;
-    }
-
-    memcpy(&sender, &hdr.id, sizeof(opal_identifier_t));
-
-    opal_output_verbose(2, pmix_server_output,
-                        "%s pmix_server_recv_connect_ack(): header received from %s on fd = %d\n",
-                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), ORTE_NAME_PRINT(&sender), sd);
-
-    /* get the authentication and version payload */
-    if (NULL == (msg = (char*)malloc(hdr.nbytes))) {
-        opal_output_verbose(2, pmix_server_output,
-                            "%s pmix_server_recv_connect_ack(): out of memory\n",
-                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME));
-        rc = ORTE_ERR_OUT_OF_RESOURCE;
-        ORTE_ERROR_LOG(rc);
-        goto err_exit;
-    }
-
-    if ( !usock_peer_recv_blocking(sd, msg, hdr.nbytes) ) {
-        opal_output_verbose(2, pmix_server_output,
-                            "%s pmix_server_recv_connect_ack(): fail to recv"
-                            " message body from %s on fd = %d\n",
-                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), ORTE_NAME_PRINT(&sender), sd);
-        rc = ORTE_ERR_UNREACH;
-        ORTE_ERROR_LOG(rc);
-        goto err_exit;
-    }
-
-    // TODO: CHANGE!
-    // OPAL version not sufficient anymore
-    // We need our own versioning of PMIx protocol!
-
-    /* check that this is from a matching version */
-    version = (char*)(msg);
-    if (0 != strcmp(version, opal_version_string)) {
-        opal_output_verbose(2, pmix_server_output,
-                            "%s pmix_server_recv_connect_ack(): version mismatch for %s on fd = %d\n"
-                            "\treceived %s instead of %s\n",
-                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), ORTE_NAME_PRINT(&sender), sd,
-                            version, opal_version_string);
-        rc = ORTE_ERR_UNREACH;
-        ORTE_ERROR_LOG(rc);
-        goto err_exit;
-    }
-
-    opal_output_verbose(2, pmix_server_output,
-                        "%s pmix_server_recv_connect_ack(): version check OK for %s on fd = %d\n",
-                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), ORTE_NAME_PRINT(&sender), sd);
-
-    // TODO: MARK FOR REMOVING.
-    //      We don't need authentification here.
-    //      Unix socket file permissions are enough.
-    /* check security token */
-    creds.credential = (char*)(msg + strlen(version) + 1);
-    creds.size = hdr.nbytes - strlen(version) - 1;
-    if (OPAL_SUCCESS != (rc = opal_sec.authenticate(&creds))) {
-        ORTE_ERROR_LOG(rc);
-        goto err_exit;
-    }
-    free(msg);
-
-    opal_output_verbose(2, pmix_server_output,
-                        "%s pmix_server_recv_connect_ack(): connect-ack %s authenticated\n",
-                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), ORTE_NAME_PRINT(&sender));
-
-    return ORTE_SUCCESS;
-
-err_exit:
-    if( peer ){
-        OBJ_RELEASE(peer);
-    }
-    return rc;
-}
-
-/*
- *  Setup peer state to reflect that connection has been established,
- *  and start any pending sends.
- */
-void pmix_server_peer_connected(pmix_server_peer_t* peer)
-{
-    opal_output_verbose(2, pmix_server_output,
-                        "%s-%s usock_peer_connected on socket %d",
-                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                        ORTE_NAME_PRINT(&(peer->name)), peer->sd);
-
-    if (peer->timer_ev_active) {
-        opal_event_del(&peer->timer_event);
-        peer->timer_ev_active = false;
-    }
-    peer->state = PMIX_SERVER_CONNECTED;
-
-    /* ensure the recv event is active */
-    if (!peer->recv_ev_active) {
-        opal_event_add(&peer->recv_event, 0);
-        peer->recv_ev_active = true;
-    }
-
-    /* initiate send of first message on queue */
-    if (NULL == peer->send_msg) {
-        peer->send_msg = (pmix_server_send_t*)
-            opal_list_remove_first(&peer->send_queue);
-    }
-    if (NULL != peer->send_msg && !peer->send_ev_active) {
-        opal_event_add(&peer->send_event, 0);
-        peer->send_ev_active = true;
-    }
-}
-
-// TODO: MARK MOVING TO OPAL UTILS
-// TRY TO SHARE THIS CODE BETWEEN PMIX CLIENT AND SERVER!
-// THUS: make it independent from PMIx server specific data
-/*
  * A blocking recv on a non-blocking socket. Used to receive the small amount of connection
  * information that identifies the peers endpoint.
  */
-static bool usock_peer_recv_blocking(int fd, void* data, size_t size)
+static bool usock_recv_blocking(int fd, void* data, size_t size)
 {
     unsigned char* ptr = (unsigned char*)data;
     size_t cnt = 0;
@@ -395,3 +156,242 @@ static bool usock_peer_recv_blocking(int fd, void* data, size_t size)
                 ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), size, fd);
     return true;
 }
+
+// ------------------------------------------------8<------------------------------------------------------//
+
+// ------------------------------------------------8<------------------------------------------------------//
+// TODO: MARK MOVING to platform directory
+// this code deals with opal events. We won't have them in non-OMPI environment.
+// Schedule migration of this code to "platform" directory inside pmix server subdir
+
+/*
+ * Initialize events to be used by the peer instance for USOCK select/poll callbacks.
+ */
+void pmix_server_peer_event_init(pmix_server_peer_t* peer)
+{
+    if (peer->sd >= 0) {
+        opal_event_set(orte_event_base,
+                       &peer->recv_event,
+                       peer->sd,
+                       OPAL_EV_READ|OPAL_EV_PERSIST,
+                       pmix_server_recv_handler,
+                       peer);
+        opal_event_set_priority(&peer->recv_event, ORTE_MSG_PRI);
+        if (peer->recv_ev_active) {
+            opal_event_del(&peer->recv_event);
+            peer->recv_ev_active = false;
+        }
+
+        opal_event_set(orte_event_base,
+                       &peer->send_event,
+                       peer->sd,
+                       OPAL_EV_WRITE|OPAL_EV_PERSIST,
+                       pmix_server_send_handler,
+                       peer);
+        opal_event_set_priority(&peer->send_event, ORTE_MSG_PRI);
+        if (peer->send_ev_active) {
+            opal_event_del(&peer->send_event);
+            peer->send_ev_active = false;
+        }
+    }
+}
+
+/*
+ *  Setup peer state to reflect that connection has been established,
+ *  and start any pending sends.
+ */
+void pmix_server_peer_connected(pmix_server_peer_t* peer)
+{
+    opal_output_verbose(2, pmix_server_output,
+                        "%s-%s usock_peer_connected on socket %d",
+                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
+                        ORTE_NAME_PRINT(&(peer->name)), peer->sd);
+
+    if (peer->timer_ev_active) {
+        opal_event_del(&peer->timer_event);
+        peer->timer_ev_active = false;
+    }
+    peer->state = PMIX_SERVER_CONNECTED;
+
+    /* ensure the recv event is active */
+    if (!peer->recv_ev_active) {
+        opal_event_add(&peer->recv_event, 0);
+        peer->recv_ev_active = true;
+    }
+
+    /* initiate send of first message on queue */
+    if (NULL == peer->send_msg) {
+        peer->send_msg = (pmix_server_send_t*)
+            opal_list_remove_first(&peer->send_queue);
+    }
+    if (NULL != peer->send_msg && !peer->send_ev_active) {
+        opal_event_add(&peer->send_event, 0);
+        peer->send_ev_active = true;
+    }
+}
+// ------------------------------------------------8<------------------------------------------------------//
+
+int pmix_server_send_connect_ack(pmix_server_peer_t* peer)
+{
+    opal_sec_cred_t *cred;
+    pmix_server_hdr_t hdr;
+    size_t sdsize;
+    char *msg;
+    int rc;
+
+    opal_output_verbose(2, pmix_server_output, "%s pmix_server_send_connect_ack(%s)",
+                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), ORTE_NAME_PRINT(&(peer->name)));
+
+    /* send a handshake that includes our process identifier
+     * to ensure we are talking to another OMPI process
+    */
+    memcpy(&hdr.id, ORTE_PROC_MY_NAME, sizeof(opal_identifier_t));
+    hdr.type = PMIX_USOCK_IDENT;
+    hdr.tag = UINT32_MAX;
+
+    /* get our security credential*/
+    if (OPAL_SUCCESS != (rc = opal_sec.get_my_credential(opal_dstore_internal,
+                                                         (opal_identifier_t*)ORTE_PROC_MY_NAME, &cred))) {
+        ORTE_ERROR_LOG(rc);
+        return rc;
+    }
+
+    /* set the number of bytes to be read beyond the header */
+    hdr.nbytes = strlen(orte_version_string) + 1 + cred->size;
+
+    /* create a space for our message */
+    sdsize = (sizeof(hdr) + hdr.nbytes);
+    if (NULL == (msg = (char*)malloc(sdsize))) {
+        return ORTE_ERR_OUT_OF_RESOURCE;
+    }
+    memset(msg, 0, sdsize);
+
+    /* load the message */
+    memcpy(msg, &hdr, sizeof(hdr));
+    memcpy(msg+sizeof(hdr), opal_version_string, strlen(opal_version_string));
+    memcpy(msg+sizeof(hdr)+strlen(opal_version_string)+1, cred->credential, cred->size);
+
+    if (ORTE_SUCCESS != usock_send_blocking(peer->sd, msg, sdsize)) {
+        ORTE_ERROR_LOG(ORTE_ERR_UNREACH);
+        return ORTE_ERR_UNREACH;
+    }
+    return ORTE_SUCCESS;
+}
+
+/*
+ *  Receive the peers globally unique process identification from a newly
+ *  connected socket and verify the expected response. If so, move the
+ *  socket to a connected state.
+ */
+int pmix_server_recv_connect_ack(int sd, pmix_server_hdr_t *dhdr)
+{
+    char *msg = NULL;
+    char *version;
+    int rc;
+    opal_sec_cred_t creds;
+    pmix_server_peer_t *peer = NULL;
+    pmix_server_hdr_t hdr;
+    orte_process_name_t sender;
+
+    opal_output_verbose(2, pmix_server_output,
+                        "%s pmix_server_recv_connect_ack(): connect ack from new peer on fd = %d\n",
+                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), sd);
+
+    // ensure all is zero'dUINT32_MAX
+    memset(&hdr, 0, sizeof(pmix_server_hdr_t));
+
+    if ( !usock_recv_blocking(sd, &hdr, sizeof(pmix_server_hdr_t))) {
+        /* unable to complete the recv */
+        opal_output_verbose(2, pmix_server_output,
+                            "%s pmix_server_recv_connect_ack(): fail to recv header from new peer on fd = %d\n",
+                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), sd);
+        rc = ORTE_ERR_UNREACH;
+        ORTE_ERROR_LOG(rc);
+        goto err_exit;
+    }
+
+    *dhdr = hdr;
+
+    if (hdr.type != PMIX_USOCK_IDENT) {
+        opal_output_verbose(2, pmix_server_output,
+                            "%s pmix_server_recv_connect_ack(): invalid header type: %d on fd = %d\n",
+                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), hdr.type, sd);
+        rc = ORTE_ERR_UNREACH;
+        ORTE_ERROR_LOG(rc);
+        goto err_exit;
+    }
+
+    memcpy(&sender, &hdr.id, sizeof(opal_identifier_t));
+
+    opal_output_verbose(2, pmix_server_output,
+                        "%s pmix_server_recv_connect_ack(): header received from %s on fd = %d\n",
+                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), ORTE_NAME_PRINT(&sender), sd);
+
+    /* get the authentication and version payload */
+    if (NULL == (msg = (char*)malloc(hdr.nbytes))) {
+        opal_output_verbose(2, pmix_server_output,
+                            "%s pmix_server_recv_connect_ack(): out of memory\n",
+                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME));
+        rc = ORTE_ERR_OUT_OF_RESOURCE;
+        ORTE_ERROR_LOG(rc);
+        goto err_exit;
+    }
+
+    if ( !usock_recv_blocking(sd, msg, hdr.nbytes) ) {
+        opal_output_verbose(2, pmix_server_output,
+                            "%s pmix_server_recv_connect_ack(): fail to recv"
+                            " message body from %s on fd = %d\n",
+                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), ORTE_NAME_PRINT(&sender), sd);
+        rc = ORTE_ERR_UNREACH;
+        ORTE_ERROR_LOG(rc);
+        goto err_exit;
+    }
+
+    // TODO: CHANGE!
+    // OPAL version not sufficient anymore
+    // We need our own versioning of PMIx protocol!
+    /* check that this is from a matching version */
+    version = (char*)(msg);
+    if (0 != strcmp(version, opal_version_string)) {
+        opal_output_verbose(2, pmix_server_output,
+                            "%s pmix_server_recv_connect_ack(): version mismatch for %s on fd = %d\n"
+                            "\treceived %s instead of %s\n",
+                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), ORTE_NAME_PRINT(&sender), sd,
+                            version, opal_version_string);
+        rc = ORTE_ERR_UNREACH;
+        ORTE_ERROR_LOG(rc);
+        goto err_exit;
+    }
+
+    opal_output_verbose(2, pmix_server_output,
+                        "%s pmix_server_recv_connect_ack(): version check OK for %s on fd = %d\n",
+                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), ORTE_NAME_PRINT(&sender), sd);
+
+// ------------------------------------------------8<------------------------------------------------------//
+    // TODO: MARK FOR REMOVING.
+    //      We don't need authentification here.
+    //      Unix socket file permissions are enough.
+    /* check security token */
+    creds.credential = (char*)(msg + strlen(version) + 1);
+    creds.size = hdr.nbytes - strlen(version) - 1;
+    if (OPAL_SUCCESS != (rc = opal_sec.authenticate(&creds))) {
+        ORTE_ERROR_LOG(rc);
+        goto err_exit;
+    }
+    free(msg);
+// ------------------------------------------------8<------------------------------------------------------//
+
+    opal_output_verbose(2, pmix_server_output,
+                        "%s pmix_server_recv_connect_ack(): connect-ack %s authenticated\n",
+                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), ORTE_NAME_PRINT(&sender));
+
+    return ORTE_SUCCESS;
+
+err_exit:
+    if( peer ){
+        OBJ_RELEASE(peer);
+    }
+    return rc;
+}
+
+
