@@ -119,15 +119,20 @@ OBJ_CLASS_DECLARATION(pmix_server_dmx_req_t);
 
 
 
-/* expose shared functions */
+// peer communication functions
 extern void pmix_server_send_handler(int fd, short args, void *cbdata);
 extern void pmix_server_recv_handler(int fd, short args, void *cbdata);
-extern void pmix_server_recv_handler(int sd, short flags, void *cbdata);
 
+// Connection-related functions
 extern int pmix_server_start_listening(struct sockaddr_un *address, int *srv_sd);
 extern void pmix_server_connection_handler(int incoming_sd, short flags, void* cbdata);
 extern int pmix_server_send_connect_ack(pmix_server_peer_t* peer);
 extern int pmix_server_recv_connect_ack(int sd, pmix_server_hdr_t *dhdr);
+
+// Processing functions
+int stuff_proc_values(opal_buffer_t *reply, orte_job_t *jdata, orte_proc_t *proc);
+void pmix_server_process_peer(pmix_server_peer_t *peer);
+
 
 /* exposed shared variables */
 extern bool pmix_server_distribute_data;
