@@ -211,7 +211,6 @@ void pmix_server_peer_connected(pmix_server_peer_t* peer)
         opal_event_del(&peer->timer_event);
         peer->timer_ev_active = false;
     }
-    peer->state = PMIX_SERVER_CONNECTED;
 
     /* ensure the recv event is active */
     if (!peer->recv_ev_active) {

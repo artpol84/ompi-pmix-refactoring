@@ -41,14 +41,6 @@
 
 BEGIN_C_DECLS
 
-/**
- * the state of the connection
- */
-typedef enum {
-    PMIX_SERVER_UNCONNECTED,
-    PMIX_SERVER_CONNECTED,
-} pmix_server_state_t;
-
 /* define a command type for client-server communications */
 typedef uint8_t pmix_cmd_t;
 #define PMIX_CMD_T OPAL_UINT8
@@ -107,8 +99,6 @@ typedef struct {
     opal_object_t super;
     int sd;
     orte_process_name_t name;
-    int retries;                  // number of times we have tried to connect to this address
-    pmix_server_state_t state;
     opal_event_t op_event;      // used for connecting and operations other than read/write
     opal_event_t send_event;    /**< registration with event thread for send events */
     bool send_ev_active;
@@ -187,7 +177,6 @@ extern void pmix_server_peer_connected(pmix_server_peer_t* peer);
 extern int pmix_server_send_connect_ack(pmix_server_peer_t* peer);
 extern int pmix_server_recv_connect_ack(int sd, pmix_server_hdr_t *dhdr);
 extern void pmix_server_peer_event_init(pmix_server_peer_t* peer);
-extern char* pmix_server_state_print(pmix_server_state_t state);
 int pmix_server_peer_add(int sd, pmix_server_peer_t *peer);
 int pmix_server_peer_remove(int sd);
 extern pmix_server_peer_t* pmix_server_peer_lookup(int sd);

@@ -487,18 +487,6 @@ err_exit:
     return;
 }
 
-char* pmix_server_state_print(pmix_server_state_t state)
-{
-    switch (state) {
-    case PMIX_SERVER_UNCONNECTED:
-        return "UNCONNECTED";
-    case PMIX_SERVER_CONNECTED:
-        return "CONNECTED";
-    default:
-        return "UNKNOWN";
-    }
-}
-
 int pmix_server_peer_add(int sd, pmix_server_peer_t *peer)
 {
     uint64_t ui64 = sd;
@@ -529,7 +517,6 @@ void pmix_server_peer_disconnect(pmix_server_peer_t* peer)
 {
     // If the peer is in 'pmix_server_peers' hash table
     // it will remain there in case it will try again
-    peer->state = PMIX_SERVER_UNCONNECTED;
     if (peer->recv_ev_active) {
         opal_event_del(&peer->recv_event);
         peer->recv_ev_active = false;
@@ -1126,8 +1113,6 @@ OBJ_CLASS_INSTANCE(pmix_server_recv_t,
 static void pcon(pmix_server_peer_t *p)
 {
     p->sd = -1;
-    p->retries = 0;
-    p->state = PMIX_SERVER_UNCONNECTED;
     p->send_ev_active = false;
     p->recv_ev_active = false;
     p->timer_ev_active = false;
