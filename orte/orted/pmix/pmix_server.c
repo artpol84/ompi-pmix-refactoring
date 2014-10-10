@@ -175,6 +175,8 @@ int pmix_server_init(void)
         return rc;
     }
 
+// ------------------------------------------------8<------------------------------------------------------//
+    // TODO: incapsulate in "platform"
     OBJ_CONSTRUCT(&collectives, opal_list_t);
     OBJ_CONSTRUCT(&pmix_server_pending_dmx_reqs, opal_list_t);
 
@@ -189,6 +191,9 @@ int pmix_server_init(void)
             goto err_exit;
         }
     }
+// ------------------------------------------------8<------------------------------------------------------//
+
+    // TODO: temp directory should be platform-specific
     /* setup the path to the rendezvous point */
     memset(&address, 0, sizeof(struct sockaddr_un));
     address.sun_family = AF_UNIX;
@@ -204,6 +209,9 @@ int pmix_server_init(void)
                 ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), __FUNCTION__, pmix_server_uri);
 
     opal_setenv("PMIX_SERVER_URI", pmix_server_uri, true, &orte_launch_environ);
+
+// ------------------------------------------------8<------------------------------------------------------//
+    // TODO: incapsulate DB in platform
 
     /* setup the datastore handles */
     if (0 > (pmix_server_local_handle = opal_dstore.open("pmix-local", NULL))) {
@@ -221,7 +229,10 @@ int pmix_server_init(void)
         ORTE_ERROR_LOG(ORTE_ERR_OUT_OF_RESOURCE);
         goto err_exit;
     }
+// ------------------------------------------------8<------------------------------------------------------//
 
+// ------------------------------------------------8<------------------------------------------------------//
+    // TODO: incapsulate ASIO in platform
     /* setup recv for collecting local barriers */
     orte_rml.recv_buffer_nb(ORTE_NAME_WILDCARD, ORTE_RML_TAG_DAEMON_COLL,
                             ORTE_RML_PERSISTENT, pmix_server_recv, NULL);
@@ -233,6 +244,7 @@ int pmix_server_init(void)
     /* setup recv for replies to direct modex requests */
     orte_rml.recv_buffer_nb(ORTE_NAME_WILDCARD, ORTE_RML_TAG_DIRECT_MODEX_RESP,
                             ORTE_RML_PERSISTENT, pmix_server_dmdx_resp, NULL);
+// ------------------------------------------------8<------------------------------------------------------//
 
     /* start listening for connection requests */
     if (ORTE_SUCCESS != (rc = pmix_server_start_listening(&address, &pmix_server_listener_socket))) {
@@ -280,6 +292,9 @@ void pmix_server_finalize(void)
     if (pmix_server_listener_ev_active) {
         opal_event_del(&pmix_server_listener_event);
     }
+
+// ------------------------------------------------8<------------------------------------------------------//
+    // TODO: isolate this in platform
     /* stop receives */
     orte_rml.recv_cancel(ORTE_NAME_WILDCARD, ORTE_RML_TAG_DAEMON_COLL);
     orte_rml.recv_cancel(ORTE_NAME_WILDCARD, ORTE_RML_TAG_COLL_RELEASE);
@@ -290,6 +305,7 @@ void pmix_server_finalize(void)
     (void)opal_dstore.close(pmix_server_local_handle);
     (void)opal_dstore.close(pmix_server_remote_handle);
     (void)opal_dstore.close(pmix_server_global_handle);
+// ------------------------------------------------8<------------------------------------------------------//
 
     /* delete the rendezvous file */
     unlink(address.sun_path);
@@ -297,9 +313,12 @@ void pmix_server_finalize(void)
         free(pmix_server_uri);
     }
 
+// ------------------------------------------------8<------------------------------------------------------//
+    // TODO: isolate this in platform
     /* cleanup collectives */
     OPAL_LIST_DESTRUCT(&collectives);
     OPAL_LIST_DESTRUCT(&pmix_server_pending_dmx_reqs);
+// ------------------------------------------------8<------------------------------------------------------//
 
     /* cleanup all peers */
     if (OPAL_SUCCESS == pmix_server_peers_first(&ui64,&pr, &nptr)) {

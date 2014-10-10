@@ -415,20 +415,7 @@ void pmix_server_process_peer(pmix_server_peer_t *peer)
             ORTE_ERROR_LOG(rc);
             OBJ_RELEASE(reply);
             OBJ_DESTRUCT(&xfer);
-            return;// ------------------------------------------------8<------------------------------------------------------//
-            // TODO: move this function out of here. It is not about send/receive. It is about processing.
-            // Also need to simplify it and/or split to several parts to increase readability
-
-
-
-
-            // TODO: move this function out of here. It is not about send/receive. It is about processing.
-            // Also need to simplify it and/or split to several parts to increase readability
-            // Also this is OMPI-specific code. We want to isolate it in platform
-
-
-
-            // ------------------------------------------------8<------------------------------------------------------//
+            return;
         }
         PMIX_SERVER_QUEUE_SEND(peer, tag, reply);
         OBJ_DESTRUCT(&xfer);

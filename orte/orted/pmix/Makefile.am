@@ -16,7 +16,7 @@ headers += \
 lib@ORTE_LIB@_la_SOURCES += \
           orted/pmix/pmix_server.c \
           orted/pmix/pmix_server_connection.c \
-          orted/pmix/pmix_server_sendrecv.c \
+          orted/pmix/pmix_peer_sendrecv.c \
           orted/pmix/pmix_peer_process.c
 
 include orted/pmix/platform/Makefile.am
