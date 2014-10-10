@@ -492,18 +492,8 @@ char* pmix_server_state_print(pmix_server_state_t state)
     switch (state) {
     case PMIX_SERVER_UNCONNECTED:
         return "UNCONNECTED";
-    case PMIX_SERVER_CLOSED:
-        return "CLOSED";
-    case PMIX_SERVER_RESOLVE:
-        return "RESOLVE";
-    case PMIX_SERVER_CONNECTING:
-        return "CONNECTING";
-    case PMIX_SERVER_CONNECT_ACK:
-        return "ACK";
     case PMIX_SERVER_CONNECTED:
         return "CONNECTED";
-    case PMIX_SERVER_FAILED:
-        return "FAILED";
     default:
         return "UNKNOWN";
     }
@@ -548,6 +538,17 @@ void pmix_server_peer_disconnect(pmix_server_peer_t* peer)
         opal_event_del(&peer->send_event);
         peer->send_ev_active = false;
     }
+
+    if (peer->timer_ev_active) {
+        opal_event_del(&peer->timer_event);
+        peer->timer_ev_active = false;
+    }
+
+    if (NULL != peer->recv_msg) {
+        OBJ_RELEASE(peer->recv_msg);
+        peer->recv_msg = NULL;
+    }
+
     if (peer->sd >= 0) {
         CLOSE_THE_SOCKET(peer->sd);
         peer->sd = -1;

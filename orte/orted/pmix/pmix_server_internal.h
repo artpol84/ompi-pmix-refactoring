@@ -46,13 +46,7 @@ BEGIN_C_DECLS
  */
 typedef enum {
     PMIX_SERVER_UNCONNECTED,
-    PMIX_SERVER_CLOSED,
-    PMIX_SERVER_RESOLVE,
-    PMIX_SERVER_CONNECTING,
-    PMIX_SERVER_CONNECT_ACK,
     PMIX_SERVER_CONNECTED,
-    PMIX_SERVER_FAILED,
-    PMIX_SERVER_ACCEPTING
 } pmix_server_state_t;
 
 /* define a command type for client-server communications */

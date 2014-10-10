@@ -267,28 +267,9 @@ static int read_bytes(pmix_server_peer_t* peer)
                                 "%s-%s pmix_server_msg_recv: peer closed connection", 
                                 ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
                                 ORTE_NAME_PRINT(&(peer->name)));
-            /* stop all events */
-            if (peer->recv_ev_active) {
-                opal_event_del(&peer->recv_event);
-                peer->recv_ev_active = false;
-            }
-            if (peer->timer_ev_active) {
-                opal_event_del(&peer->timer_event);
-                peer->timer_ev_active = false;
-            }
-            if (peer->send_ev_active) {
-                opal_event_del(&peer->send_event);
-                peer->send_ev_active = false;
-            }
-            if (NULL != peer->recv_msg) {
-                OBJ_RELEASE(peer->recv_msg);
-                peer->recv_msg = NULL;
-            }
-            peer->state = PMIX_SERVER_CLOSED;
-            CLOSE_THE_SOCKET(peer->sd);
-            //if (NULL != pmix_server.oob_exception_callback) {
-            //   pmix_server.oob_exception_callback(&peer->peer_name, ORTE_RML_PEER_DISCONNECTED);
-            //}
+            int sd = peer->sd;
+            pmix_server_peer_disconnect(peer);
+            pmix_server_peer_remove(sd);
             return ORTE_ERR_WOULD_BLOCK;
         }
         /* we were able to read something, so adjust counters and location */
@@ -1404,8 +1385,9 @@ void pmix_server_recv_handler(int sd, short flags, void *cbdata)
                 opal_output_verbose(2, pmix_server_output,
                                     "%s:usock:recv:handler error reading bytes - closing connection",
                                     ORTE_NAME_PRINT(ORTE_PROC_MY_NAME));
-                peer->state = PMIX_SERVER_CLOSED;
-                CLOSE_THE_SOCKET(peer->sd);
+                int sd = peer->sd;
+                pmix_server_peer_disconnect(peer);
+                pmix_server_peer_remove(sd);
                 return;
             }
         }
@@ -1435,10 +1417,9 @@ void pmix_server_recv_handler(int sd, short flags, void *cbdata)
                             ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
                             ORTE_NAME_PRINT(&(peer->name)));
                 /* turn off the recv event */
-                opal_event_del(&peer->recv_event);
-                peer->recv_ev_active = false;
-                peer->state = PMIX_SERVER_CLOSED;
-                CLOSE_THE_SOCKET(peer->sd);
+                int sd = peer->sd;
+                pmix_server_peer_disconnect(peer);
+                pmix_server_peer_remove(sd);
                 return;
             }
         }
