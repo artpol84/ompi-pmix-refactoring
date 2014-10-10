@@ -105,7 +105,8 @@ int pmix_server_peers_first(uint64_t *ui64, pmix_server_peer_t **pr, void**next)
 int pmix_server_peers_next(uint64_t *ui64, pmix_server_peer_t **pr, void**next);
 int pmix_server_peer_add(int sd, pmix_server_peer_t *peer);
 int pmix_server_peer_remove(int sd);
-void pmix_server_peer_event_init(pmix_server_peer_t* peer);
+void pmix_server_peer_event_init(pmix_server_peer_t* peer, void *recv_cb, void *send_cb);
+void pmix_server_peer_connected(pmix_server_peer_t* peer);
 pmix_server_peer_t* pmix_server_peer_lookup(int sd);
 void pmix_server_peer_disconnect(pmix_server_peer_t *peer);
 void pmix_server_peer_dump(pmix_server_peer_t* peer, const char* msg);

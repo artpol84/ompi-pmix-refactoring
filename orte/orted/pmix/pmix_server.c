@@ -201,7 +201,7 @@ int pmix_server_init(void)
     /* add it to our launch environment so our children get it */
     (void)asprintf(&pmix_server_uri, "%"PRIu64":%s", *(opal_identifier_t*)&orte_process_info.my_name, address.sun_path);
 
-    opal_output_verbose(2, "%s %s: CPMIX server uri: %s\n",
+    opal_output_verbose(2, pmix_server_output, "%s %s: CPMIX server uri: %s\n",
                 ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), __FUNCTION__, pmix_server_uri);
 
     opal_setenv("PMIX_SERVER_URI", pmix_server_uri, true, &orte_launch_environ);
@@ -461,8 +461,10 @@ static void connection_handler(int incoming_sd, short flags, void* cbdata)
     peer->sd = sd;
     sd = -1; // we don't want to close this fd through sd anymore
 
+    // TODO: We need to create generic handler to pass it to platform-dependent code,
+    // where we will provide proper wrapper
+    pmix_server_peer_event_init(peer, (void*)pmix_server_recv_handler, (void*)pmix_server_send_handler);
     // Perform response steps
-    pmix_server_peer_event_init(peer);
     if ( ORTE_SUCCESS != (rc = pmix_server_send_connect_ack(peer)) ) {
         opal_output(0, "%s connection_handler [pmix server]: "
                     "usock_peer_send_connect_ack( %s ) failed\n",

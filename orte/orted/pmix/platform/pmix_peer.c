@@ -138,6 +138,68 @@ int pmix_server_peer_remove(int sd)
     return OPAL_SUCCESS;
 }
 
+void pmix_server_peer_event_init(pmix_server_peer_t* peer, void *recv_cb, void *send_cb)
+{
+    if (peer->sd >= 0) {
+        opal_event_set(orte_event_base,
+                       &peer->recv_event,
+                       peer->sd,
+                       OPAL_EV_READ|OPAL_EV_PERSIST,
+                       (event_callback_fn)recv_cb,
+                       peer);
+        opal_event_set_priority(&peer->recv_event, ORTE_MSG_PRI);
+        if (peer->recv_ev_active) {
+            opal_event_del(&peer->recv_event);
+            peer->recv_ev_active = false;
+        }
+
+        opal_event_set(orte_event_base,
+                       &peer->send_event,
+                       peer->sd,
+                       OPAL_EV_WRITE|OPAL_EV_PERSIST,
+                       (event_callback_fn)send_cb,
+                       peer);
+        opal_event_set_priority(&peer->send_event, ORTE_MSG_PRI);
+        if (peer->send_ev_active) {
+            opal_event_del(&peer->send_event);
+            peer->send_ev_active = false;
+        }
+    }
+}
+
+/*
+ *  Setup peer state to reflect that connection has been established,
+ *  and start any pending sends.
+ */
+void pmix_server_peer_connected(pmix_server_peer_t* peer)
+{
+    opal_output_verbose(2, pmix_server_output,
+                        "%s-%s usock_peer_connected on socket %d",
+                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
+                        ORTE_NAME_PRINT(&(peer->name)), peer->sd);
+
+    if (peer->timer_ev_active) {
+        opal_event_del(&peer->timer_event);
+        peer->timer_ev_active = false;
+    }
+
+    /* ensure the recv event is active */
+    if (!peer->recv_ev_active) {
+        opal_event_add(&peer->recv_event, 0);
+        peer->recv_ev_active = true;
+    }
+
+    /* initiate send of first message on queue */
+    if (NULL == peer->send_msg) {
+        peer->send_msg = (pmix_server_send_t*)
+            opal_list_remove_first(&peer->send_queue);
+    }
+    if (NULL != peer->send_msg && !peer->send_ev_active) {
+        opal_event_add(&peer->send_event, 0);
+        peer->send_ev_active = true;
+    }
+}
+
 void pmix_server_peer_disconnect(pmix_server_peer_t* peer)
 {
     // If the peer is in 'pmix_server_peers' hash table

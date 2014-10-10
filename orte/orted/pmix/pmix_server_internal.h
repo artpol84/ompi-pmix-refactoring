@@ -123,7 +123,7 @@ OBJ_CLASS_DECLARATION(pmix_server_dmx_req_t);
 extern void pmix_server_send_handler(int fd, short args, void *cbdata);
 extern void pmix_server_recv_handler(int fd, short args, void *cbdata);
 extern void pmix_server_recv_handler(int sd, short flags, void *cbdata);
-extern void pmix_server_peer_connected(pmix_server_peer_t* peer);
+
 extern int pmix_server_send_connect_ack(pmix_server_peer_t* peer);
 extern int pmix_server_recv_connect_ack(int sd, pmix_server_hdr_t *dhdr);
 
