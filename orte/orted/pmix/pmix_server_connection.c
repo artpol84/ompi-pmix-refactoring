@@ -337,7 +337,8 @@ int pmix_server_start_listening(struct sockaddr_un *address, int *srv_sd)
     sd = socket(PF_UNIX, SOCK_STREAM, 0);
     if (sd < 0) {
         if (EAFNOSUPPORT != opal_socket_errno) {
-            opal_output(0,"pmix_server_start_listening: socket() failed: %s (%d)",
+            opal_output(0, "%s %s: socket() failed: %s (%d)\n",
+                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), __FUNCTION__,
                         strerror(opal_socket_errno), opal_socket_errno);
         }
         return ORTE_ERR_IN_ERRNO;
@@ -345,30 +346,32 @@ int pmix_server_start_listening(struct sockaddr_un *address, int *srv_sd)
 
     addrlen = sizeof(struct sockaddr_un);
     if (bind(sd, (struct sockaddr*)address, addrlen) < 0) {
-        opal_output(0, "%s bind() failed on error %s (%d)",
-                    ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                    strerror(opal_socket_errno),
-                    opal_socket_errno );
+        opal_output(0, "%s %s: bind() failed on error %s (%d)\n",
+                    ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), __FUNCTION__,
+                    strerror(opal_socket_errno), opal_socket_errno);
         CLOSE_THE_SOCKET(sd);
         return ORTE_ERROR;
     }
 
     /* setup listen backlog to maximum allowed by kernel */
     if (listen(sd, SOMAXCONN) < 0) {
-        opal_output(0, "pmix_server_component_init: listen(): %s (%d)",
+        opal_output(0, "%s %s: listen(): %s (%d)\n",
+                    ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), __FUNCTION__,
                     strerror(opal_socket_errno), opal_socket_errno);
         return ORTE_ERROR;
     }
 
     /* set socket up to be non-blocking, otherwise accept could block */
     if ((flags = fcntl(sd, F_GETFL, 0)) < 0) {
-        opal_output(0, "pmix_server_component_init: fcntl(F_GETFL) failed: %s (%d)",
+        opal_output(0, "%s %s: fcntl(F_GETFL) failed: %s (%d)\n",
+                    ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), __FUNCTION__,
                     strerror(opal_socket_errno), opal_socket_errno);
         return ORTE_ERROR;
     }
     flags |= O_NONBLOCK;
     if (fcntl(sd, F_SETFL, flags) < 0) {
-        opal_output(0, "pmix_server_component_init: fcntl(F_SETFL) failed: %s (%d)",
+        opal_output(0, "%s %s: fcntl(F_SETFL) failed: %s (%d)\n",
+                    ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), __FUNCTION__,
                     strerror(opal_socket_errno), opal_socket_errno);
         return ORTE_ERROR;
     }
