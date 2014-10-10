@@ -98,8 +98,17 @@ int pmix_server_peer_init(void)
 
 void pmix_server_peers_destruct(void)
 {
-    if( pmix_server_peers )
-        OBJ_DESTRUCT(&pmix_server_peers);
+    if( pmix_server_peers ){
+        opal_output_verbose(2, pmix_server_output,
+                            "%s: %s [pmix server]: called\n",
+                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), __FUNCTION__);
+        OBJ_RELEASE(pmix_server_peers);
+        pmix_server_peers = NULL;
+    }else{
+        opal_output_verbose(2, pmix_server_output,
+                            "%s: %s [pmix server]: WARNING! Double table destruction!\n",
+                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), __FUNCTION__);
+    }
 }
 
 int pmix_server_peer_add(int sd, pmix_server_peer_t *peer)
