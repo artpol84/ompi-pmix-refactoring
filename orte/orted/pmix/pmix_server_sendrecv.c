@@ -5,19 +5,20 @@
  * Copyright (c) 2004-2011 The University of Tennessee and The University
  *                         of Tennessee Research Foundation.  All rights
  *                         reserved.
- * Copyright (c) 2004-2005 High Performance Computing Center Stuttgart, 
+ * Copyright (c) 2004-2005 High Performance Computing Center Stuttgart,
  *                         University of Stuttgart.  All rights reserved.
  * Copyright (c) 2004-2005 The Regents of the University of California.
  *                         All rights reserved.
- * Copyright (c) 2006-2013 Los Alamos National Security, LLC. 
+ * Copyright (c) 2006-2013 Los Alamos National Security, LLC.
  *                         All rights reserved.
  * Copyright (c) 2009      Cisco Systems, Inc.  All rights reserved.
  * Copyright (c) 2011      Oak Ridge National Labs.  All rights reserved.
  * Copyright (c) 2013-2014 Intel, Inc.  All rights reserved.
+ * Copyright (c) 2014      Artem Polyakov <artpol84@gmail.com>.  All rights reserved.
  * $COPYRIGHT$
- * 
+ *
  * Additional copyrights may follow
- * 
+ *
  * $HEADER$
  *
  */
@@ -73,7 +74,6 @@
 #include "pmix_server_internal.h"
 
 // Routines that actually work with UNIX sockets
-
 static int send_bytes(pmix_server_peer_t* peer)
 {
     pmix_server_send_t* msg = peer->send_msg;
@@ -1315,8 +1315,7 @@ void pmix_server_recv_handler(int sd, short flags, void *cbdata)
                             ORTE_NAME_PRINT(&(peer->name)), peer->sd);
         peer->recv_msg = OBJ_NEW(pmix_server_recv_t);
         if (NULL == peer->recv_msg) {
-            opal_output_verbose(2, pmix_server_output,
-                                "%s [pmix server]: %s-%s unable to allocate recv message [sd = %d]\n",
+            opal_output(0, "%s [pmix server]: %s-%s unable to allocate recv message [sd = %d]\n",
                                 __FUNCTION__, ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
                                 ORTE_NAME_PRINT(&(peer->name)), peer->sd);
             return;
@@ -1340,8 +1339,7 @@ void pmix_server_recv_handler(int sd, short flags, void *cbdata)
                 return;
             } else {
                 /* close the connection */
-                opal_output_verbose(2, pmix_server_output,
-                                    "%s [pmix server]: %s-%s unable to recv message header - closing connection [sd = %d]",
+                opal_output(0, "%s [pmix server]: %s-%s unable to recv message header - closing connection [sd = %d]",
                                     __FUNCTION__, ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
                                     ORTE_NAME_PRINT(&(peer->name)), peer->sd);
                 int sd = peer->sd;
@@ -1396,8 +1394,7 @@ void pmix_server_recv_handler(int sd, short flags, void *cbdata)
             return;
         } else {
             /* report the error */
-            opal_output_verbose(2, pmix_server_output,
-                                "%s [pmix server]: %s-%s unable to recv message body - closing connection [sd = %d]",
+            opal_output(0, "%s [pmix server]: %s-%s unable to recv message body - closing connection [sd = %d]",
                                 __FUNCTION__, ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
                                 ORTE_NAME_PRINT(&(peer->name)), peer->sd);
             /* shutdown */
