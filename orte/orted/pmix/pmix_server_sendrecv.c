@@ -86,10 +86,9 @@ static int send_bytes(pmix_server_peer_t* peer)
             case EINTR:
                 continue;
             case EAGAIN:
-            case EWOULDBLOCK:
                 // Let event lib progress while this socket come to life
                 // Both errors will have the same effect, so join them
-                return ORTE_ERR_WOULD_BLOCK;
+                return ORTE_ERR_RESOURCE_BUSY;
             default:
                 // The error is serious and we cannot progress this message
                 opal_output(0, "%s [pmix server]: %s->%s write failed: %s (%d) [sd = %d]",
@@ -119,10 +118,9 @@ static int read_bytes(pmix_server_peer_t* peer)
             case EINTR:
                 continue;
             case EAGAIN:
-            case EWOULDBLOCK:
                 /* Let event lib progress while this socket come to life
                  Both errors will have the same effect, so join them */
-                return ORTE_ERR_WOULD_BLOCK;
+                return ORTE_ERR_RESOURCE_BUSY;
             default:
                 /* The error is serious and we cannot progress this message */
                 opal_output(0, "%s [pmix server]: %s<-%s read failed: %s (%d) [sd = %d]",
@@ -158,46 +156,48 @@ void pmix_server_send_handler(int sd, short flags, void *cbdata)
     int rc;
 
     opal_output_verbose(2, pmix_server_output,
-                        "%s usock:send_handler called to send to peer %s",
-                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                        ORTE_NAME_PRINT(&peer->name));
+                 "%s [pmix server]: called for peer %s [sd = %d]\n",
+                 __FUNCTION__, ORTE_NAME_PRINT(&(peer->name)), peer->sd);
 
     switch (peer->state) {
     case PMIX_SERVER_CONNECTED:
-        opal_output_verbose(2, pmix_server_output,
-                            "%s usock:send_handler SENDING TO %s",
-                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                            (NULL == peer->send_msg) ? "NULL" : ORTE_NAME_PRINT(&peer->name));
+
         if (NULL != msg) {
             /* if the header hasn't been completely sent, send it */
             if (!msg->hdr_sent) {
-                if (ORTE_SUCCESS == (rc = send_bytes(peer))) {
-                    /* header is completely sent */
-                    msg->hdr_sent = true;
-                    /* setup to send the data */
-                    if (NULL == msg->data) {
-                        /* this was a zero-byte msg - nothing more to do */
+                rc = send_bytes(peer);
+                /*process errors first (if any)*/
+                if (ORTE_SUCCESS != rc ) {
+                    if (ORTE_ERR_RESOURCE_BUSY == rc) {
+                        /* exit this event and let the event lib progress */
+                        return;
+                    } else {
+                        // report the error
+                        opal_output_verbose(2, pmix_server_output,
+                                "%s [pmix server]: %s-%s unable to send message header [sd = %d]\n",
+                                __FUNCTION__, ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
+                                ORTE_NAME_PRINT(&(peer->name)), peer->sd);
+// ------------------------------------------------8<------------------------------------------------------//
+                        // TODO: move all event-dealing code to platform dir
+                        opal_event_del(&peer->send_event);
+                        peer->send_ev_active = false;
                         OBJ_RELEASE(msg);
                         peer->send_msg = NULL;
+// ------------------------------------------------8<------------------------------------------------------//
                         goto next;
-                    } else {
-                        msg->sdptr = msg->data->base_ptr;
-                        msg->sdbytes = msg->hdr.nbytes;
                     }
-                    /* fall thru and let the send progress */
-                } else if (ORTE_ERR_RESOURCE_BUSY == rc) {
-                    /* exit this event and let the event lib progress */
-                    return;
-                } else {
-                    // report the error
-                    opal_output(0, "%s-%s pmix_server_peer_send_handler: unable to send header",
-                                ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                                ORTE_NAME_PRINT(&(peer->name)));
-                    opal_event_del(&peer->send_event);
-                    peer->send_ev_active = false;
+                }
+                /* header is completely sent */
+                msg->hdr_sent = true;
+                /* setup to send the data */
+                if (NULL == msg->data) {
+                    /* this was a zero-byte msg - nothing more to do */
                     OBJ_RELEASE(msg);
                     peer->send_msg = NULL;
                     goto next;
+                } else {
+                    msg->sdptr = msg->data->base_ptr;
+                    msg->sdbytes = msg->hdr.nbytes;
                 }
             }
             /* progress the data transmission */
@@ -212,13 +212,17 @@ void pmix_server_send_handler(int sd, short flags, void *cbdata)
                     return;
                 } else {
                     // report the error
-                    opal_output(0, "%s-%s pmix_server_peer_send_handler: unable to send message ON SOCKET %d",
-                                ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                                ORTE_NAME_PRINT(&(peer->name)), peer->sd);
+                    opal_output_verbose(2, pmix_server_output,
+                            "%s [pmix server]: %s-%s unable to send message body [sd = %d]\n",
+                            __FUNCTION__, ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
+                            ORTE_NAME_PRINT(&(peer->name)), peer->sd);
+// ------------------------------------------------8<------------------------------------------------------//
+                    // TODO: move all event-dealing code to platform dir
                     opal_event_del(&peer->send_event);
                     peer->send_ev_active = false;
                     OBJ_RELEASE(msg);
                     peer->send_msg = NULL;
+// ------------------------------------------------8<------------------------------------------------------//
                     return;
                 }
             }
@@ -230,18 +234,28 @@ void pmix_server_send_handler(int sd, short flags, void *cbdata)
              * wait for another send_event to fire before doing so. This gives
              * us a chance to service any pending recvs.
              */
+// ------------------------------------------------8<------------------------------------------------------//
+            // TODO: incapsulate opal_list with some pmix wrapper
             peer->send_msg = (pmix_server_send_t*)
                 opal_list_remove_first(&peer->send_queue);
+// ------------------------------------------------8<------------------------------------------------------//
+
         }
         
+// ------------------------------------------------8<------------------------------------------------------//
+        // TODO: move event-dealing code to platform
+
         /* if nothing else to do unregister for send event notifications */
         if (NULL == peer->send_msg && peer->send_ev_active) {
             opal_event_del(&peer->send_event);
             peer->send_ev_active = false;
         }
+// ------------------------------------------------8<------------------------------------------------------//
+
         break;
 
     default:
+        // TODO: remove. We don't need peer->state anymore
         opal_output(0, "%s-%s pmix_server_peer_send_handler: invalid connection state (%d) on socket %d",
                     ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
                     ORTE_NAME_PRINT(&(peer->name)),
@@ -254,7 +268,9 @@ void pmix_server_send_handler(int sd, short flags, void *cbdata)
     }
 }
 
-
+// ------------------------------------------------8<------------------------------------------------------//
+// TODO: move this function out of here. It is not about send/receive. It is about processing.
+// Also need to simplify it and/or split to several parts to increase readability
 
 /* stuff proc attributes for sending back to a proc */
 static int stuff_proc_values(opal_buffer_t *reply, orte_job_t *jdata, orte_proc_t *proc)
@@ -546,6 +562,11 @@ static int stuff_proc_values(opal_buffer_t *reply, orte_job_t *jdata, orte_proc_
 
     return ORTE_SUCCESS;
 }
+
+
+// TODO: move this function out of here. It is not about send/receive. It is about processing.
+// Also need to simplify it and/or split to several parts to increase readability
+// Also this is OMPI-specific code. We want to isolate it in platform
 
 /*
  * Dispatch to the appropriate action routine based on the state
@@ -1292,6 +1313,8 @@ static void process_message(pmix_server_peer_t *peer)
     }
 }
 
+// ------------------------------------------------8<------------------------------------------------------//
+
 void pmix_server_recv_handler(int sd, short flags, void *cbdata)
 {
     pmix_server_peer_t* peer = (pmix_server_peer_t*)cbdata;
@@ -1304,18 +1327,18 @@ void pmix_server_recv_handler(int sd, short flags, void *cbdata)
     switch (peer->state) {
     case PMIX_SERVER_CONNECTED:
 
-        /* allocate a new message and setup for recv */
-        opal_output_verbose(2, pmix_server_output,
-                "%s [pmix server]: %s-%s allocate new recv msg [sd = %d]\n",
-                __FUNCTION__, ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                ORTE_NAME_PRINT(&(peer->name)), peer->sd);
-
+        if( NULL == peer->recv_msg ){
+            /* allocate a new message and setup for recv */
+            opal_output_verbose(2, pmix_server_output,
+                    "%s [pmix server]: %s-%s allocate new recv msg [sd = %d]\n",
+                    __FUNCTION__, ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
+                    ORTE_NAME_PRINT(&(peer->name)), peer->sd);
             peer->recv_msg = OBJ_NEW(pmix_server_recv_t);
             if (NULL == peer->recv_msg) {
                 opal_output_verbose(2, pmix_server_output,
-                        "%s [pmix server]: %s-%s unable to allocate recv message [sd = %d]\n",
-                        __FUNCTION__, ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                        ORTE_NAME_PRINT(&(peer->name)), peer->sd);
+                                    "%s [pmix server]: %s-%s unable to allocate recv message [sd = %d]\n",
+                                    __FUNCTION__, ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
+                                    ORTE_NAME_PRINT(&(peer->name)), peer->sd);
                 return;
             }
             /* start by reading the header */
@@ -1384,7 +1407,7 @@ void pmix_server_recv_handler(int sd, short flags, void *cbdata)
                 opal_output_verbose(2, pmix_server_output,
                         "%s [pmix server]: %s<-%s COMPLETE RECVD OF %d BYTES, TAG %d [sd = %d]\n",
                         __FUNCTION__, ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                        ORTE_NAME_PRINT((orte_process_name_t*)&(peer->recv_msg->hdr.id),
+                        ORTE_NAME_PRINT((orte_process_name_t*)&(peer->recv_msg->hdr.id)),
                         (int)peer->recv_msg->hdr.nbytes, peer->recv_msg->hdr.tag, peer->sd);
                 /* process the message */
                 process_message(peer);
