@@ -124,7 +124,7 @@ int pmix_server_peers_first(uint64_t *ui64, pmix_server_peer_t **pr, void**next)
 
 int pmix_server_peers_next(uint64_t *ui64, pmix_server_peer_t **pr, void**next)
 {
-    return opal_hash_table_get_next_key_uint64(pmix_server_peers, &ui64, (void**)&pr, *next, &next);
+    return opal_hash_table_get_next_key_uint64(pmix_server_peers, ui64, (void**)&pr, *next, next);
 }
 
 int pmix_server_peer_remove(int sd)

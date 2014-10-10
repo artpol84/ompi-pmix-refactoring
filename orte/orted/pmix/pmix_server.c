@@ -112,8 +112,7 @@ static OBJ_CLASS_INSTANCE(pmix_server_trk_t,
 /*
  * Local utility functions
  */
-static void connection_handler(int incoming_sd, short flags, void* cbdata);
-static int pmix_server_start_listening(struct sockaddr_un *address);
+
 static void pmix_server_recv(int status, orte_process_name_t* sender,
                              opal_buffer_t *buffer,
                              orte_rml_tag_t tg, void *cbdata);
@@ -236,10 +235,25 @@ int pmix_server_init(void)
                             ORTE_RML_PERSISTENT, pmix_server_dmdx_resp, NULL);
 
     /* start listening for connection requests */
-    if (ORTE_SUCCESS != (rc = pmix_server_start_listening(&address))) {
+    if (ORTE_SUCCESS != (rc = pmix_server_start_listening(&address, &pmix_server_listener_socket))) {
         ORTE_ERROR_LOG(rc);
         goto err_exit;
     }
+
+// ------------------------------------------------8<------------------------------------------------------//
+// TODO: isolate this in platform
+
+    pmix_server_listener_ev_active = true;
+    /* setup to listen via the event lib */
+    pmix_server_listener_ev_active = true;
+    opal_event_set(orte_event_base, &pmix_server_listener_event,
+                   pmix_server_listener_socket,
+                   OPAL_EV_READ|OPAL_EV_PERSIST,
+                   pmix_server_connection_handler,
+                   0);
+    opal_event_set_priority(&pmix_server_listener_event, ORTE_MSG_PRI);
+    opal_event_add(&pmix_server_listener_event, 0);
+// ------------------------------------------------8<------------------------------------------------------//
 
     return rc;
 
@@ -309,200 +323,8 @@ void pmix_server_finalize(void)
     pmix_server_peers_destruct();
 }
 
-/*
- * start listening on our rendezvous file
- */
-static int pmix_server_start_listening(struct sockaddr_un *address)
-{
-    int flags;
-    opal_socklen_t addrlen;
-    int sd = -1;
 
-    /* create a listen socket for incoming connection attempts */
-    sd = socket(PF_UNIX, SOCK_STREAM, 0);
-    if (sd < 0) {
-        if (EAFNOSUPPORT != opal_socket_errno) {
-            opal_output(0,"pmix_server_start_listening: socket() failed: %s (%d)", 
-                        strerror(opal_socket_errno), opal_socket_errno);
-        }
-        return ORTE_ERR_IN_ERRNO;
-    }
 
-    addrlen = sizeof(struct sockaddr_un);
-    if (bind(sd, (struct sockaddr*)address, addrlen) < 0) {
-        opal_output(0, "%s bind() failed on error %s (%d)",
-                    ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                    strerror(opal_socket_errno),
-                    opal_socket_errno );
-        CLOSE_THE_SOCKET(sd);
-        return ORTE_ERROR;
-    }
-        
-    /* setup listen backlog to maximum allowed by kernel */
-    if (listen(sd, SOMAXCONN) < 0) {
-        opal_output(0, "pmix_server_component_init: listen(): %s (%d)", 
-                    strerror(opal_socket_errno), opal_socket_errno);
-        return ORTE_ERROR;
-    }
-        
-    /* set socket up to be non-blocking, otherwise accept could block */
-    if ((flags = fcntl(sd, F_GETFL, 0)) < 0) {
-        opal_output(0, "pmix_server_component_init: fcntl(F_GETFL) failed: %s (%d)", 
-                    strerror(opal_socket_errno), opal_socket_errno);
-        return ORTE_ERROR;
-    }
-    flags |= O_NONBLOCK;
-    if (fcntl(sd, F_SETFL, flags) < 0) {
-        opal_output(0, "pmix_server_component_init: fcntl(F_SETFL) failed: %s (%d)", 
-                    strerror(opal_socket_errno), opal_socket_errno);
-        return ORTE_ERROR;
-    }
-
-    /* record this socket */
-    pmix_server_listener_socket = sd;
-
-    /* setup to listen via the event lib */
-    pmix_server_listener_ev_active = true;
-    opal_event_set(orte_event_base, &pmix_server_listener_event,
-                   pmix_server_listener_socket,
-                   OPAL_EV_READ|OPAL_EV_PERSIST,
-                   connection_handler,
-                   0);
-    opal_event_set_priority(&pmix_server_listener_event, ORTE_MSG_PRI);
-    opal_event_add(&pmix_server_listener_event, 0);
-
-    opal_output_verbose(2, pmix_server_output,
-                        "%s pmix server listening on socket %d",
-                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), sd);
-
-    return ORTE_SUCCESS;
-}
-
-/*
- * Handler for accepting connections from the event library
- */
-static void connection_handler(int incoming_sd, short flags, void* cbdata)
-{
-    struct sockaddr addr;
-    opal_socklen_t addrlen = sizeof(struct sockaddr);
-    int sd, rc;
-    pmix_server_hdr_t hdr;
-    pmix_server_peer_t *peer = NULL;
-
-    sd = accept(incoming_sd, (struct sockaddr*)&addr, &addrlen);
-    opal_output_verbose(2, pmix_server_output, "%s connection_handler [pmix server]: "
-                        "working connection (%d, %d)\n",
-                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), sd, opal_socket_errno);
-
-    if (sd < 0) {
-        if (EINTR == opal_socket_errno) {
-            return;
-        }
-        if (opal_socket_errno != EAGAIN && opal_socket_errno != EWOULDBLOCK) {
-            if (EMFILE == opal_socket_errno) {
-                /*
-                 * Close incoming_sd so that orte_show_help will have a file
-                 * descriptor with which to open the help file.  We will be
-                 * exiting anyway, so we don't need to keep it open.
-                 */
-                CLOSE_THE_SOCKET(incoming_sd);
-                ORTE_ERROR_LOG(ORTE_ERR_SYS_LIMITS_SOCKETS);
-                orte_show_help("help-orterun.txt", "orterun:sys-limit-sockets", true);
-            } else {
-                opal_output(0, "%s connection_handler [pmix server]: accept() failed: %s (%d).\n",
-                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                            strerror(opal_socket_errno), opal_socket_errno);
-            }
-        }
-        return;
-    }
-
-    // Sanity check: new fd should be in lookup table!
-    peer = pmix_server_peer_lookup(sd);
-    if (NULL != peer) {
-        opal_output_verbose(2, pmix_server_output,
-                            "%s connection_handler [pmix server]: WARNING!"
-                            " Newly allocated fd = %d is already in the pmix_server_peers.\n"
-                            "This shouldn't happen and might be dangerous.",
-                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), sd);
-        // Peer might have active send/receive events but we can't call
-        // pmix_server_peer_remove since sd is a new descriptor and it will be closed!
-        // Do dirty workaround. Maybe we should error exit?
-        pmix_server_peer_remove(sd);
-        peer = NULL;
-    }
-
-    /* get the handshake */
-    if (ORTE_SUCCESS != (rc = pmix_server_recv_connect_ack(sd, &hdr))) {
-        ORTE_ERROR_LOG(rc);
-        goto err_exit;
-    }
-
-    /* set socket up to be non-blocking */
-    if ((flags = fcntl(sd, F_GETFL, 0)) < 0) {
-        opal_output(0, "%s connection_handler [pmix server]: fcntl(F_GETFL) failed: %s (%d)\n",
-                    ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), strerror(opal_socket_errno), opal_socket_errno);
-            // TODO: Shouldn't we error exit here?
-    } else {
-        flags |= O_NONBLOCK;
-        if (fcntl(sd, F_SETFL, flags) < 0) {
-            opal_output(0, "%s connection_handler [pmix server]: fcntl(F_SETFL) failed: %s (%d)\n",
-                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), strerror(opal_socket_errno), opal_socket_errno);
-            // TODO: Shouldn't we error exit here?
-        }
-    }
-
-    // Prepare peer structure
-    if( NULL == (peer = OBJ_NEW(pmix_server_peer_t) ) ){
-        rc = ORTE_ERR_OUT_OF_RESOURCE;
-        goto err_exit;
-    }
-    memcpy(&peer->name, &hdr.id, sizeof(opal_identifier_t));
-    peer->sd = sd;
-    sd = -1; // we don't want to close this fd through sd anymore
-
-    // TODO: We need to create generic handler to pass it to platform-dependent code,
-    // where we will provide proper wrapper
-    pmix_server_peer_event_init(peer, (void*)pmix_server_recv_handler, (void*)pmix_server_send_handler);
-    // Perform response steps
-    if ( ORTE_SUCCESS != (rc = pmix_server_send_connect_ack(peer)) ) {
-        opal_output(0, "%s connection_handler [pmix server]: "
-                    "usock_peer_send_connect_ack( %s ) failed\n",
-                    ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                    ORTE_NAME_PRINT(&(peer->name)));
-        ORTE_ERROR_LOG(rc);
-        goto err_exit;
-    }
-    pmix_server_peer_connected(peer);
-
-    // Keep track about this peer
-    if ( OPAL_SUCCESS != (rc = pmix_server_peer_add(peer->sd, peer)) ) {
-        opal_output(0, "%s connection_handler [pmix server]: pmix_server_peer_add( %d, %s ) failed: %s (%d)\n",
-                    ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), peer->sd, ORTE_NAME_PRINT(&(peer->name)),
-                    strerror(opal_socket_errno), opal_socket_errno);
-        OPAL_ERROR_LOG(rc);
-        goto err_exit;
-    }
-
-    if (2 <= opal_output_get_verbosity(pmix_server_output)) {
-        pmix_server_peer_dump(peer, "accepted");
-    }
-    opal_output(0, "%s connection_handler [pmix server]: "
-                "opalpmix_server_peer_add(%d, %s), peer addr %p\n",
-                ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), peer->sd,
-                ORTE_NAME_PRINT(&(peer->name)), (void*)peer);
-    // successful return
-    return;
-err_exit:
-    if( peer != NULL ){
-        pmix_server_peer_disconnect(peer);
-        OBJ_RELEASE(peer);
-    }
-    if( sd >= 0 ){
-        CLOSE_THE_SOCKET(sd);
-    }
-    return;
-}
 
 static pmix_server_trk_t* get_trk(opal_identifier_t *id,
                                   orte_grpcomm_signature_t *sig)

@@ -124,6 +124,8 @@ extern void pmix_server_send_handler(int fd, short args, void *cbdata);
 extern void pmix_server_recv_handler(int fd, short args, void *cbdata);
 extern void pmix_server_recv_handler(int sd, short flags, void *cbdata);
 
+extern int pmix_server_start_listening(struct sockaddr_un *address, int *srv_sd);
+extern void pmix_server_connection_handler(int incoming_sd, short flags, void* cbdata);
 extern int pmix_server_send_connect_ack(pmix_server_peer_t* peer);
 extern int pmix_server_recv_connect_ack(int sd, pmix_server_hdr_t *dhdr);
 
