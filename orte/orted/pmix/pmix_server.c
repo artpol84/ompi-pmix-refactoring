@@ -868,25 +868,6 @@ void pmix_server_peer_dump(pmix_server_peer_t* peer, const char* msg)
 }
 
 
-
-static void pcon(pmix_server_peer_t *p)
-{
-    p->sd = -1;
-    p->send_ev_active = false;
-    p->recv_ev_active = false;
-    p->timer_ev_active = false;
-    OBJ_CONSTRUCT(&p->send_queue, opal_list_t);
-    p->send_msg = NULL;
-    p->recv_msg = NULL;
-}
-static void pdes(pmix_server_peer_t *p)
-{
-    OPAL_LIST_DESTRUCT(&p->send_queue);
-}
-OBJ_CLASS_INSTANCE(pmix_server_peer_t,
-                   opal_object_t,
-                   pcon, pdes);
-
 static void rqcon(pmix_server_dmx_req_t *p)
 {
     p->peer = NULL;

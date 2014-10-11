@@ -90,6 +90,24 @@ static void dcon(pmix_server_send_t *p)
 }
 OBJ_CLASS_INSTANCE(pmix_server_send_t, opal_list_item_t, scon, dcon);
 
+static void pcon(pmix_server_peer_t *p)
+{
+    p->sd = -1;
+    p->send_ev_active = false;
+    p->recv_ev_active = false;
+    p->timer_ev_active = false;
+    OBJ_CONSTRUCT(&p->send_queue, opal_list_t);
+    p->send_msg = NULL;
+    p->recv_msg = NULL;
+}
+static void pdes(pmix_server_peer_t *p)
+{
+    OPAL_LIST_DESTRUCT(&p->send_queue);
+}
+OBJ_CLASS_INSTANCE(pmix_server_peer_t,
+                   opal_object_t,
+                   pcon, pdes);
+
 int pmix_server_peer_init(void)
 {
     pmix_server_peers = OBJ_NEW(opal_hash_table_t);
