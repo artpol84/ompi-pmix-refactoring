@@ -26,6 +26,8 @@
 #ifndef PMIX_BASIC_H
 #define PMIX_BASIC_H
 
+#include "opal/class/opal_list.h"
+
 // ------------------------------------------------8<------------------------------------------------------//
 // TODO: Schedule transaction to opal/mca/pmix/basic ?!
 
@@ -45,5 +47,34 @@ typedef struct {
         shutdown(socket, 2);        \
         close(socket);              \
     } while(0)
+
+
+typedef struct {
+    opal_list_item_t super;
+    uint32_t vpid;
+    uint32_t cpu_bmp;
+} pmix_local_peer_info_t;
+
+typedef struct {
+    bool hwloc_on;
+    opal_buffer_t hwloc_topo;
+    char* cpu_bmap;
+    uint32_t jobid;
+    uint32_t app_num;
+    uint32_t usize;
+    uint32_t size;
+    uint32_t app_ldr;
+    uint32_t rank;
+    uint32_t glob_rank;
+    uint32_t app_rank;
+    uint32_t nproc_offs;
+    uint32_t loc_rank;
+    uint32_t loc_size;
+    uint32_t node_rank;
+    uint32_t node_size;
+    uint32_t max_procs;
+    opal_buffer_t *peers_cpu_bmaps;
+    char *peers_list;
+} pmix_job_info_t;
 
 #endif // PMIX_BASIC_H

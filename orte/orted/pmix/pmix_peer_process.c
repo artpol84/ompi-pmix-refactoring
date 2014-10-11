@@ -41,46 +41,55 @@
 
 #include "pmix_basic.h"
 #include "platform/pmix_peer.h"
+#include "platform/pmix_platform.h"
 //#include "pmix_server.h"
 #include "pmix_server_internal.h"
 
+#define PMIX_KV_FIELD_uint32(x) (x->data.uint32)
+#define PMIX_KV_FIELD_uint16(x) (x->data.uint16)
+#define PMIX_KV_FIELD_string(x) (x->data.string)
 
+#define PMIX_KV_TYPE_uint32 OPAL_UINT32
+#define PMIX_KV_TYPE_uint16 OPAL_UINT16
+#define PMIX_KV_TYPE_string OPAL_STRING
 
+#define PMIX_ADD_KP(_kp, _reply, _key, _field, _val )   \
+{                                       \
+    OBJ_CONSTRUCT(_kp, opal_value_t);    \
+    _kp->key = strdup(_key);              \
+    _kp->type = PMIX_KV_TYPE_ ## _field;  \
+    PMIX_KV_FIELD_ ## _field(_kp) = _val;               \
+    if (OPAL_SUCCESS != (rc = opal_dss.pack(_reply, &_kp, 1, OPAL_VALUE))) {  \
+        ORTE_ERROR_LOG(rc); \
+        OBJ_DESTRUCT(kp);  \
+        return rc;          \
+    }                       \
+    OBJ_DESTRUCT(kp);       \
+}
 
 /* stuff proc attributes for sending back to a proc */
-int stuff_proc_values(opal_buffer_t *reply, orte_job_t *jdata, orte_proc_t *proc)
+int pmix_server_proc_info(opal_buffer_t *reply, opal_identifier_t id)
 {
-    char *tmp;
+    orte_process_name_t name;
+    pmix_job_info_t jinfo;
     opal_value_t kv, *kp;
     int rc;
-    orte_node_t *node;
-    orte_app_context_t *app;
-    orte_proc_t *pptr;
-    int i;
-    char **list;
-    orte_process_name_t name;
-    opal_buffer_t buf;
 
-    /* convenience def */
-    node = proc->node;
-    app = (orte_app_context_t*)opal_pointer_array_get_item(jdata->apps, proc->app_idx);
+    memcpy((char*)&name, (char*)&id, sizeof(orte_process_name_t));
+    if( OPAL_SUCCESS != ( rc = pmix_server_proc_info_pm(name, &jinfo) ) ){
+        opal_output(0, "%s %s: Cannot get job information from platform-dependent code.\n",
+                    ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), __FUNCTION__);
+        return rc;
+    }
+
     kp = &kv;
 
-#if OPAL_HAVE_HWLOC
-    /* pass the local topology for the app so it doesn't
-     * have to discover it for itself */
-    if (NULL != opal_hwloc_topology) {
-        OBJ_CONSTRUCT(&buf, opal_buffer_t);
-        if (OPAL_SUCCESS != (rc = opal_dss.pack(&buf, &opal_hwloc_topology, 1, OPAL_HWLOC_TOPO))) {
-            ORTE_ERROR_LOG(rc);
-            OBJ_DESTRUCT(&buf);
-            return rc;
-        }
+    if( jinfo.hwloc_on ){
         OBJ_CONSTRUCT(&kv, opal_value_t);
         kv.key = strdup(PMIX_LOCAL_TOPO);
         kv.type = OPAL_BYTE_OBJECT;
-        opal_dss.unload(&buf, (void**)&kv.data.bo.bytes, &kv.data.bo.size);
-        OBJ_DESTRUCT(&buf);
+        opal_dss.unload(&jinfo.hwloc_topo, (void**)&kv.data.bo.bytes, &kv.data.bo.size);
+        OBJ_DESTRUCT(&jinfo.hwloc_topo);
         if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &kp, 1, OPAL_VALUE))) {
             ORTE_ERROR_LOG(rc);
             OBJ_DESTRUCT(&kv);
@@ -88,249 +97,63 @@ int stuff_proc_values(opal_buffer_t *reply, orte_job_t *jdata, orte_proc_t *proc
         }
         OBJ_DESTRUCT(&kv);
     }
-#endif /* OPAL_HAVE_HWLOC */
+
     /* cpuset */
-    tmp = NULL;
-    if (orte_get_attribute(&proc->attributes, ORTE_PROC_CPU_BITMAP, (void**)&tmp, OPAL_STRING)) {
-        OBJ_CONSTRUCT(&kv, opal_value_t);
-        kv.key = strdup(PMIX_CPUSET);
-        kv.type = OPAL_STRING;
-        kv.data.string = tmp;
-        if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &kp, 1, OPAL_VALUE))) {
-            ORTE_ERROR_LOG(rc);
-            OBJ_DESTRUCT(&kv);
-            return rc;
-        }
-        OBJ_DESTRUCT(&kv);
+    if( NULL != jinfo.cpu_bmap ){
+        PMIX_ADD_KP(kp, reply, PMIX_CPUSET, string, jinfo.cpu_bmap );
     }
+
     /* jobid */
-    OBJ_CONSTRUCT(&kv, opal_value_t);
-    kv.key = strdup(PMIX_JOBID);
-    kv.type = OPAL_UINT32;
-    kv.data.uint32 = proc->name.jobid;
-    if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &kp, 1, OPAL_VALUE))) {
-        ORTE_ERROR_LOG(rc);
-        OBJ_DESTRUCT(&kv);
-        return rc;
-    }
-    OBJ_DESTRUCT(&kv);
+    PMIX_ADD_KP(kp, reply, PMIX_JOBID, uint32, jinfo.jobid );
     /* appnum */
-    OBJ_CONSTRUCT(&kv, opal_value_t);
-    kv.key = strdup(PMIX_APPNUM);
-    kv.type = OPAL_UINT32;
-    kv.data.uint32 = proc->app_idx;
-    if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &kp, 1, OPAL_VALUE))) {
-        ORTE_ERROR_LOG(rc);
-        OBJ_DESTRUCT(&kv);
-        return rc;
-    }
-    OBJ_DESTRUCT(&kv);
+    PMIX_ADD_KP(kp, reply, PMIX_APPNUM, uint32, jinfo.app_num );
     /* rank */
-    OBJ_CONSTRUCT(&kv, opal_value_t);
-    kv.key = strdup(PMIX_RANK);
-    kv.type = OPAL_UINT32;
-    kv.data.uint32 = proc->name.vpid;
-    if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &kp, 1, OPAL_VALUE))) {
-        ORTE_ERROR_LOG(rc);
-        OBJ_DESTRUCT(&kv);
-        return rc;
-    }
-    OBJ_DESTRUCT(&kv);
+    PMIX_ADD_KP(kp, reply, PMIX_RANK, uint32, jinfo.rank );
     /* global rank */
-    OBJ_CONSTRUCT(&kv, opal_value_t);
-    kv.key = strdup(PMIX_GLOBAL_RANK);
-    kv.type = OPAL_UINT32;
-    kv.data.uint32 = proc->name.vpid + jdata->offset;
-    if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &kp, 1, OPAL_VALUE))) {
-        ORTE_ERROR_LOG(rc);
-        OBJ_DESTRUCT(&kv);
-        return rc;
-    }
-    OBJ_DESTRUCT(&kv);
+    PMIX_ADD_KP(kp, reply, PMIX_GLOBAL_RANK, uint32, jinfo.glob_rank );
     /* app rank */
-    OBJ_CONSTRUCT(&kv, opal_value_t);
-    kv.key = strdup(PMIX_APP_RANK);
-    kv.type = OPAL_UINT32;
-    kv.data.uint32 = proc->app_rank;
-    if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &kp, 1, OPAL_VALUE))) {
-        ORTE_ERROR_LOG(rc);
-        OBJ_DESTRUCT(&kv);
-        return rc;
-    }
-    OBJ_DESTRUCT(&kv);
+    PMIX_ADD_KP(kp, reply, PMIX_APP_RANK, uint32, jinfo.app_rank );
     /* offset */
-    OBJ_CONSTRUCT(&kv, opal_value_t);
-    kv.key = strdup(PMIX_NPROC_OFFSET);
-    kv.type = OPAL_UINT32;
-    kv.data.uint32 = jdata->offset;
-    if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &kp, 1, OPAL_VALUE))) {
-        ORTE_ERROR_LOG(rc);
-        OBJ_DESTRUCT(&kv);
-        return rc;
-    }
-    OBJ_DESTRUCT(&kv);
+    PMIX_ADD_KP(kp, reply, PMIX_NPROC_OFFSET, uint32, jinfo.nproc_offs );
     /* local rank */
-    OBJ_CONSTRUCT(&kv, opal_value_t);
-    kv.key = strdup(PMIX_LOCAL_RANK);
-    kv.type = OPAL_UINT16;
-    kv.data.uint16 = proc->local_rank;
-    if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &kp, 1, OPAL_VALUE))) {
-        ORTE_ERROR_LOG(rc);
-        OBJ_DESTRUCT(&kv);
-        return rc;
-    }
-    OBJ_DESTRUCT(&kv);
+    PMIX_ADD_KP(kp, reply, PMIX_LOCAL_RANK, uint32, jinfo.loc_rank );
     /* node rank */
-    OBJ_CONSTRUCT(&kv, opal_value_t);
-    kv.key = strdup(PMIX_NODE_RANK);
-    kv.type = OPAL_UINT16;
-    kv.data.uint16 = proc->node_rank;
-    if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &kp, 1, OPAL_VALUE))) {
-        ORTE_ERROR_LOG(rc);
-        OBJ_DESTRUCT(&kv);
-        return rc;
-    }
-    OBJ_DESTRUCT(&kv);
+    PMIX_ADD_KP(kp, reply, PMIX_NODE_RANK, uint32, jinfo.node_rank );
+    /* pass the local ldr */
+    PMIX_ADD_KP(kp, reply, PMIX_LOCALLDR, uint32, *(uint64_t*)&name );
+    /* app ldr */
+    PMIX_ADD_KP(kp, reply, PMIX_APPLDR, uint32, jinfo.app_ldr );
+    /* univ size */
+    PMIX_ADD_KP(kp, reply, PMIX_UNIV_SIZE, uint32, jinfo.usize );
+    /* job size */
+    PMIX_ADD_KP(kp, reply, PMIX_JOB_SIZE, uint32, jinfo.size );
+    /* local size */
+    PMIX_ADD_KP(kp, reply, PMIX_LOCAL_SIZE, uint32, jinfo.loc_size );
+    /* node size */
+    PMIX_ADD_KP(kp, reply, PMIX_NODE_SIZE, uint32, jinfo.node_rank );
+    /* max procs */
+    PMIX_ADD_KP(kp, reply, PMIX_MAX_PROCS, uint32, jinfo.max_procs );
     /* construct the list of local peers */
-    list = NULL;
-    name.jobid = jdata->jobid;
-    name.vpid = 0;
-    OBJ_CONSTRUCT(&buf, opal_buffer_t);
-    for (i=0; i < node->procs->size; i++) {
-        if (NULL == (pptr = (orte_proc_t*)opal_pointer_array_get_item(node->procs, i))) {
-            continue;
-        }
-        if (pptr->name.jobid == jdata->jobid) {
-            opal_argv_append_nosize(&list, ORTE_VPID_PRINT(pptr->name.vpid));
-            if (pptr->name.vpid < name.vpid) {
-                name.vpid = pptr->name.vpid;
-            }
-            /* note that we have to pass the cpuset for each local
-             * peer so locality can be computed */
-            tmp = NULL;
-            if (orte_get_attribute(&pptr->attributes, ORTE_PROC_CPU_BITMAP, (void**)&tmp, OPAL_STRING)) {
-                /* add the name of the proc */
-                if (OPAL_SUCCESS != (rc = opal_dss.pack(&buf, (opal_identifier_t*)&pptr->name, 1, OPAL_UINT64))) {
-                    ORTE_ERROR_LOG(rc);
-                    opal_argv_free(list);
-                    return rc;
-                }
-                /* add its cpuset */
-                if (OPAL_SUCCESS != (rc = opal_dss.pack(&buf, &tmp, 1, OPAL_STRING))) {
-                    ORTE_ERROR_LOG(rc);
-                    opal_argv_free(list);
-                    return rc;
-                }
-            }
-        }
-    }
+    PMIX_ADD_KP(kp, reply, PMIX_LOCAL_PEERS, string, jinfo.peers_list );
+
     /* pass the blob containing the cpusets for all local peers - note
      * that the cpuset of the proc we are responding to will be included,
      * so we don't need to send it separately */
     OBJ_CONSTRUCT(&kv, opal_value_t);
     kv.key = strdup(PMIX_LOCAL_CPUSETS);
     kv.type = OPAL_BYTE_OBJECT;
-    opal_dss.unload(&buf, (void**)&kv.data.bo.bytes, &kv.data.bo.size);
-    OBJ_DESTRUCT(&buf);
-    if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &kp, 1, OPAL_VALUE))) {
-        ORTE_ERROR_LOG(rc);
-        OBJ_DESTRUCT(&kv);
-        opal_argv_free(list);
-        return rc;
-    }
-    OBJ_DESTRUCT(&kv);
-    /* construct the list of peers for transmission */
-    tmp = opal_argv_join(list, ',');
-    opal_argv_free(list);
-    /* pass the local ldr */
-    OBJ_CONSTRUCT(&kv, opal_value_t);
-    kv.key = strdup(PMIX_LOCALLDR);
-    kv.type = OPAL_UINT64;
-    kv.data.uint64 = *(uint64_t*)&name;
-    if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &kp, 1, OPAL_VALUE))) {
-        ORTE_ERROR_LOG(rc);
-        OBJ_DESTRUCT(&kv);
-        free(tmp);
-        return rc;
-    }
-    OBJ_DESTRUCT(&kv);
-    /* pass the list of peers */
-    OBJ_CONSTRUCT(&kv, opal_value_t);
-    kv.key = strdup(PMIX_LOCAL_PEERS);
-    kv.type = OPAL_STRING;
-    kv.data.string = tmp;
+    opal_dss.unload(jinfo.peers_cpu_bmaps, (void**)&kv.data.bo.bytes, &kv.data.bo.size);
+    // TODO: Shouldn't be done here. must be done in platform code
+    OBJ_RELEASE(jinfo.peers_cpu_bmaps);
+
     if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &kp, 1, OPAL_VALUE))) {
         ORTE_ERROR_LOG(rc);
         OBJ_DESTRUCT(&kv);
         return rc;
     }
     OBJ_DESTRUCT(&kv);
-    /* app ldr */
-    OBJ_CONSTRUCT(&kv, opal_value_t);
-    kv.key = strdup(PMIX_APPLDR);
-    kv.type = OPAL_UINT32;
-    kv.data.uint32 = app->first_rank;
-    if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &kp, 1, OPAL_VALUE))) {
-        ORTE_ERROR_LOG(rc);
-        OBJ_DESTRUCT(&kv);
-        return rc;
-    }
-    OBJ_DESTRUCT(&kv);
-    /* univ size */
-    OBJ_CONSTRUCT(&kv, opal_value_t);
-    kv.key = strdup(PMIX_UNIV_SIZE);
-    kv.type = OPAL_UINT32;
-    kv.data.uint32 = jdata->num_procs;
-    if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &kp, 1, OPAL_VALUE))) {
-        ORTE_ERROR_LOG(rc);
-        OBJ_DESTRUCT(&kv);
-        return rc;
-    }
-    OBJ_DESTRUCT(&kv);
-    /* job size */
-    OBJ_CONSTRUCT(&kv, opal_value_t);
-    kv.key = strdup(PMIX_JOB_SIZE);
-    kv.type = OPAL_UINT32;
-    kv.data.uint32 = jdata->num_procs;
-    if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &kp, 1, OPAL_VALUE))) {
-        ORTE_ERROR_LOG(rc);
-        OBJ_DESTRUCT(&kv);
-        return rc;
-    }
-    OBJ_DESTRUCT(&kv);
-    /* local size */
-    OBJ_CONSTRUCT(&kv, opal_value_t);
-    kv.key = strdup(PMIX_LOCAL_SIZE);
-    kv.type = OPAL_UINT32;
-    kv.data.uint32 = jdata->num_local_procs;
-    if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &kp, 1, OPAL_VALUE))) {
-        ORTE_ERROR_LOG(rc);
-        OBJ_DESTRUCT(&kv);
-        return rc;
-    }
-    OBJ_DESTRUCT(&kv);
-    /* node size */
-    OBJ_CONSTRUCT(&kv, opal_value_t);
-    kv.key = strdup(PMIX_NODE_SIZE);
-    kv.type = OPAL_UINT32;
-    kv.data.uint32 = node->num_procs;
-    if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &kp, 1, OPAL_VALUE))) {
-        ORTE_ERROR_LOG(rc);
-        OBJ_DESTRUCT(&kv);
-        return rc;
-    }
-    OBJ_DESTRUCT(&kv);
-    /* max procs */
-    OBJ_CONSTRUCT(&kv, opal_value_t);
-    kv.key = strdup(PMIX_MAX_PROCS);
-    kv.type = OPAL_UINT32;
-    kv.data.uint16 = jdata->total_slots_alloc;
-    if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &kp, 1, OPAL_VALUE))) {
-        ORTE_ERROR_LOG(rc);
-        OBJ_DESTRUCT(&kv);
-        return rc;
-    }
-    OBJ_DESTRUCT(&kv);
+
+
     /* local topology - we do this so the procs won't read the
      * topology themselves as this could overwhelm the local
      * system on large-scale SMPs */
@@ -1002,24 +825,9 @@ void pmix_server_process_peer(pmix_server_peer_t *peer)
                             ORTE_NAME_PRINT(ORTE_PROC_MY_NAME));
         /* create the attrs buffer */
         OBJ_CONSTRUCT(&buf, opal_buffer_t);
-        /* look up this proc */
-        memcpy((char*)&name, (char*)&id, sizeof(orte_process_name_t));
-        if (NULL == (jdata = orte_get_job_data_object(name.jobid))) {
-            ORTE_ERROR_LOG(ORTE_ERR_NOT_FOUND);
-            OBJ_DESTRUCT(&buf);
-            OBJ_DESTRUCT(&xfer);
-            return;
-        }
-        if (NULL == (proc = (orte_proc_t*)opal_pointer_array_get_item(jdata->procs, name.vpid))) {
-            ORTE_ERROR_LOG(ORTE_ERR_NOT_FOUND);
-            OBJ_DESTRUCT(&buf);
-            OBJ_DESTRUCT(&xfer);
-            return;
-        }
-        /* mark the proc as having registered */
-        ORTE_ACTIVATE_PROC_STATE(&proc->name, ORTE_PROC_STATE_REGISTERED);
+
         /* stuff the values corresponding to the list of supported attrs */
-        if (ORTE_SUCCESS != (ret = stuff_proc_values(&buf, jdata, proc))) {
+        if (ORTE_SUCCESS != (ret = pmix_server_proc_info(&buf, id))) {
             ORTE_ERROR_LOG(ret);
             OBJ_DESTRUCT(&buf);
             OBJ_DESTRUCT(&xfer);

@@ -130,7 +130,7 @@ extern int pmix_server_send_connect_ack(pmix_server_peer_t* peer);
 extern int pmix_server_recv_connect_ack(int sd, pmix_server_hdr_t *dhdr);
 
 // Processing functions
-int stuff_proc_values(opal_buffer_t *reply, orte_job_t *jdata, orte_proc_t *proc);
+int pmix_server_proc_info(opal_buffer_t *reply, opal_identifier_t id);
 void pmix_server_process_peer(pmix_server_peer_t *peer);
 
 

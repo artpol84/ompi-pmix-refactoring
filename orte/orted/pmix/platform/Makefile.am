@@ -9,7 +9,9 @@
 #
 
 headers += \
-          orted/pmix/platform/pmix_peer.h
+          orted/pmix/platform/pmix_peer.h \
+          orted/pmix/platform/pmix_platform.h
 
 libopen_rte_la_SOURCES += \
-          orted/pmix/platform/pmix_peer.c
+          orted/pmix/platform/pmix_peer.c \
+          orted/pmix/platform/pmix_jobinfo.c
