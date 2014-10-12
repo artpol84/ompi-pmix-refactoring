@@ -426,6 +426,159 @@ err_cleanup:
     *_reply = NULL;
     return rc;
 }
+
+inline static orte_grpcomm_signature_t *_extract_signature(opal_buffer_t *xfer)
+{
+    int rc;
+    int32_t cnt;
+    orte_grpcomm_signature_t *sig = NULL;
+    /* setup a signature object */
+    sig = OBJ_NEW(orte_grpcomm_signature_t);
+    if( NULL == sig ){
+        goto err_exit;
+    }
+    /* get the number of procs in this fence collective */
+    cnt = 1;
+    if (OPAL_SUCCESS != (rc = opal_dss.unpack(xfer, &sig->sz, &cnt, OPAL_SIZE))) {
+        ORTE_ERROR_LOG(rc);
+        goto err_exit;
+    }
+    /* if a signature was provided, get it */
+    if (0 < sig->sz) {
+        sig->signature = (orte_process_name_t*)malloc(sig->sz * sizeof(orte_process_name_t));
+        cnt = sig->sz;
+        if (OPAL_SUCCESS != (rc = opal_dss.unpack(xfer, sig->signature, &cnt, OPAL_UINT64))) {
+            ORTE_ERROR_LOG(rc);
+            goto err_exit;
+        }
+    }
+
+    return sig;
+err_exit:
+    if( NULL != sig ){
+        OBJ_RELEASE(sig);
+    }
+    return NULL;
+}
+
+inline static int _process_uri(opal_buffer_t *xfer)
+{
+    char *local_uri;
+    int rc, cnt = 1;
+
+    if (OPAL_SUCCESS != (rc = opal_dss.unpack(xfer, &local_uri, &cnt, OPAL_STRING))) {
+        ORTE_ERROR_LOG(rc);
+       return ORTE_ERROR;
+    }
+
+    /* if not NULL, then update our connection info as we might need
+     * to send this proc a message at some point */
+    if (NULL != local_uri) {
+        // FIXME: Non-portable, move to the platform directory
+        orte_rml.set_contact_info(local_uri);
+        free(local_uri);
+    }
+    return ORTE_SUCCESS;
+}
+
+inline static int _process_kvps(pmix_server_pm_handler_t *pm, opal_buffer_t *xfer,
+                                orte_grpcomm_signature_t *sig,
+                                opal_buffer_t *blocal, opal_buffer_t *bremote, bool *_found)
+{
+    opal_buffer_t *bptr;
+    opal_pmix_scope_t scope;
+    opal_value_t kv;
+    int handle;
+    int rc, cnt = 1;
+    bool found = false;
+
+    OBJ_CONSTRUCT(blocal, opal_buffer_t);
+    OBJ_CONSTRUCT(bremote, opal_buffer_t);
+    while (OPAL_SUCCESS == (rc = opal_dss.unpack(xfer, &scope, &cnt, PMIX_SCOPE_T))) {
+        found = true;  // at least one block of data is present
+        /* unpack the buffer */
+        cnt = 1;
+        if (OPAL_SUCCESS != (rc = opal_dss.unpack(xfer, &bptr, &cnt, OPAL_BUFFER))) {
+            OPAL_ERROR_LOG(rc);
+            goto err_cleanup;
+        }
+        /* prep the value_t */
+        OBJ_CONSTRUCT(&kv, opal_value_t);
+        kv.key = strdup("modex");
+        kv.type = OPAL_BYTE_OBJECT;
+        kv.data.bo.bytes = (uint8_t*)bptr->base_ptr;
+        kv.data.bo.size = bptr->bytes_used;
+        if (PMIX_LOCAL == scope) {
+            /* store it in the local-modex dstore handle */
+            opal_output_verbose(2, pmix_server_output,
+                    "%s recvd LOCAL modex of size %d for proc %s",
+                    ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
+                    (int)kv.data.bo.size, ORTE_NAME_PRINT(&pm->name));
+            handle = pmix_server_local_handle;
+            /* local procs will want this data */
+            if (OPAL_SUCCESS != (rc = opal_dss.pack(blocal, &bptr, 1, OPAL_BUFFER))) {
+                ORTE_ERROR_LOG(rc);
+                goto err_add_kv;
+            }
+        } else if (PMIX_REMOTE == scope) {
+            /* store it in the remote-modex dstore handle */
+            opal_output_verbose(2, pmix_server_output,
+                    "%s recvd REMOTE modex of size %d for proc %s",
+                    ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
+                    (int)kv.data.bo.size, ORTE_NAME_PRINT(&pm->name));
+            handle = pmix_server_remote_handle;
+            /* remote procs will want this data */
+            if (OPAL_SUCCESS != (rc = opal_dss.pack(bremote, &bptr, 1, OPAL_BUFFER))) {
+                ORTE_ERROR_LOG(rc);
+                goto err_add_kv;
+            }
+        } else {
+            /* must be for global dissemination */
+            opal_output_verbose(2, pmix_server_output,
+                    "%s recvd GLOBAL modex of size %d for proc %s",
+                    ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
+                    (int)kv.data.bo.size, ORTE_NAME_PRINT(&pm->name));
+            handle = pmix_server_global_handle;
+            /* local procs will want this data */
+            if (OPAL_SUCCESS != (rc = opal_dss.pack(blocal, &bptr, 1, OPAL_BUFFER))) {
+                ORTE_ERROR_LOG(rc);
+                goto err_add_kv;
+            }
+            /* remote procs will want this data */
+            if (OPAL_SUCCESS != (rc = opal_dss.pack(bremote, &bptr, 1, OPAL_BUFFER))) {
+                ORTE_ERROR_LOG(rc);
+                goto err_add_kv;
+            }
+        }
+        if (OPAL_SUCCESS != (rc = opal_dstore.store(handle, (opal_identifier_t*)&pm->name, &kv))) {
+            ORTE_ERROR_LOG(rc);
+            goto err_add_kv;
+        }
+        bptr->base_ptr = NULL;  // protect the data region
+        OBJ_RELEASE(bptr);
+        OBJ_DESTRUCT(&kv);
+        cnt = 1;
+    }
+
+    if (OPAL_ERR_UNPACK_READ_PAST_END_OF_BUFFER == rc) {
+        rc = 0;
+    }else{
+        OPAL_ERROR_LOG(rc);
+        goto err_cleanup;
+    }
+
+    *_found = found;
+    return rc;
+
+err_add_kv:
+    OBJ_DESTRUCT(&kv);
+
+err_cleanup:
+    OBJ_DESTRUCT(blocal);
+    OBJ_DESTRUCT(bremote);
+    return rc;
+}
+
 /*
  * Dispatch to the appropriate action routine based on the state
  * of the connection with the peer.
@@ -437,17 +590,15 @@ void pmix_server_process_peer(pmix_server_peer_t *peer)
     pmix_cmd_t cmd;
     opal_buffer_t *reply = NULL;
     opal_buffer_t xfer, *bptr, buf, save, blocal, bremote;
-    opal_value_t kv, *kp;
+    opal_value_t kv, *kp = &kv;
     opal_identifier_t id, idreq;
     orte_process_name_t name;
     pmix_server_pm_handler_t *pm;
     uint32_t tag;
-    opal_pmix_scope_t scope;
-    int handle;
+
     pmix_server_dmx_req_t *req, *nextreq;
     bool found;
     orte_grpcomm_signature_t *sig;
-    char *local_uri;
 
     /* xfer the message to a buffer for unpacking */
     OBJ_CONSTRUCT(&xfer, opal_buffer_t);
@@ -514,48 +665,30 @@ void pmix_server_process_peer(pmix_server_peer_t *peer)
                             ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
                             (PMIX_FENCENB_CMD == cmd) ? "FENCE_NB" : "FENCE",
                             OPAL_NAME_PRINT(id), tag);
-        /* setup a signature object */
-        sig = OBJ_NEW(orte_grpcomm_signature_t);
-        /* get the number of procs in this fence collective */
-        cnt = 1;
-        if (OPAL_SUCCESS != (rc = opal_dss.unpack(&xfer, &sig->sz, &cnt, OPAL_SIZE))) {
-            ORTE_ERROR_LOG(rc);
-            OBJ_RELEASE(sig);
+
+        if( NULL == (sig = _extract_signature(&xfer)) ){
+            // TODO: In this case we need to reply with error!
             goto reply_fence;
         }
-        /* if a signature was provided, get it */
-        if (0 < sig->sz) {
-            sig->signature = (orte_process_name_t*)malloc(sig->sz * sizeof(orte_process_name_t));
-            cnt = sig->sz;
-            if (OPAL_SUCCESS != (rc = opal_dss.unpack(&xfer, sig->signature, &cnt, OPAL_UINT64))) {
-                ORTE_ERROR_LOG(rc);
-                OBJ_RELEASE(sig);
-                goto reply_fence;
-            }
-        }
+
         if (4 < opal_output_get_verbosity(pmix_server_output)) {
             char *tmp=NULL;
             (void)opal_dss.print(&tmp, NULL, sig, ORTE_SIGNATURE);
-            opal_output(0, "%s %s called with procs %s",
-                        ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
+            opal_output(0, "%s %s called with procs %s", ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
                         (PMIX_FENCENB_CMD == cmd) ? "FENCE_NB" : "FENCE", tmp);
             free(tmp);
         }
-        /* get the URI for this process */
-        cnt = 1;
-        if (OPAL_SUCCESS != (rc = opal_dss.unpack(&xfer, &local_uri, &cnt, OPAL_STRING))) {
-            ORTE_ERROR_LOG(rc);
-            OBJ_RELEASE(sig);
+
+        if( ORTE_SUCCESS != _process_uri(&xfer)){
+            // TODO: In this case we need to reply with error!
             goto reply_fence;
         }
 
-
-        /* if not NULL, then update our connection info as we might need
-         * to send this proc a message at some point */
-        if (NULL != local_uri) {
-            orte_rml.set_contact_info(local_uri);
-            free(local_uri);
+        if( ORTE_SUCCESS != _process_kvps(pm, &xfer, sig, &blocal, &bremote, &found) ){
+            OBJ_RELEASE(sig);
+            goto cleanup;
         }
+
         /* if we are in a group collective mode, then we need to prep
          * the data as it should be included in the modex */
         OBJ_CONSTRUCT(&save, opal_buffer_t);
@@ -566,96 +699,7 @@ void pmix_server_process_peer(pmix_server_peer_t *peer)
         }
         /* if data was given, unpack and store it in the pmix dstore - it is okay
          * if there was no data, it's just a fence */
-        cnt = 1;
-        found = false;
-        OBJ_CONSTRUCT(&blocal, opal_buffer_t);
-        OBJ_CONSTRUCT(&bremote, opal_buffer_t);
-        while (OPAL_SUCCESS == (rc = opal_dss.unpack(&xfer, &scope, &cnt, PMIX_SCOPE_T))) {
-            found = true;  // at least one block of data is present
-            /* unpack the buffer */
-            cnt = 1;
-            if (OPAL_SUCCESS != (rc = opal_dss.unpack(&xfer, &bptr, &cnt, OPAL_BUFFER))) {
-                OPAL_ERROR_LOG(rc);
-                OBJ_RELEASE(sig);
-                goto cleanup;
-            }
-            /* prep the value_t */
-            OBJ_CONSTRUCT(&kv, opal_value_t);
-            kv.key = strdup("modex");
-            kv.type = OPAL_BYTE_OBJECT;
-            kv.data.bo.bytes = (uint8_t*)bptr->base_ptr;
-            kv.data.bo.size = bptr->bytes_used;
-            if (PMIX_LOCAL == scope) {
-                /* store it in the local-modex dstore handle */
-                opal_output_verbose(2, pmix_server_output,
-                                    "%s recvd LOCAL modex of size %d for proc %s",
-                                    ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                                    (int)kv.data.bo.size,
-                                    ORTE_NAME_PRINT(&peer->name));
-                handle = pmix_server_local_handle;
-                /* local procs will want this data */
-                if (OPAL_SUCCESS != (rc = opal_dss.pack(&blocal, &bptr, 1, OPAL_BUFFER))) {
-                    ORTE_ERROR_LOG(rc);
-                    OBJ_RELEASE(sig);
-                    OBJ_DESTRUCT(&blocal);
-                    OBJ_DESTRUCT(&bremote);
-                    goto cleanup;
-                }
-            } else if (PMIX_REMOTE == scope) {
-                /* store it in the remote-modex dstore handle */
-                opal_output_verbose(2, pmix_server_output,
-                                    "%s recvd REMOTE modex of size %d for proc %s",
-                                    ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                                    (int)kv.data.bo.size,
-                                    ORTE_NAME_PRINT(&peer->name));
-                handle = pmix_server_remote_handle;
-                /* remote procs will want this data */
-                if (OPAL_SUCCESS != (rc = opal_dss.pack(&bremote, &bptr, 1, OPAL_BUFFER))) {
-                    ORTE_ERROR_LOG(rc);
-                    OBJ_RELEASE(sig);
-                    OBJ_DESTRUCT(&blocal);
-                    OBJ_DESTRUCT(&bremote);
-                    goto cleanup;
-                }
-            } else {
-                /* must be for global dissemination */
-                opal_output_verbose(2, pmix_server_output,
-                                    "%s recvd GLOBAL modex of size %d for proc %s",
-                                    ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
-                                    (int)kv.data.bo.size,
-                                    ORTE_NAME_PRINT(&peer->name));
-                handle = pmix_server_global_handle;
-                /* local procs will want this data */
-                if (OPAL_SUCCESS != (rc = opal_dss.pack(&blocal, &bptr, 1, OPAL_BUFFER))) {
-                    ORTE_ERROR_LOG(rc);
-                    OBJ_RELEASE(sig);
-                    OBJ_DESTRUCT(&blocal);
-                    OBJ_DESTRUCT(&bremote);
-                    goto cleanup;
-                }
-                /* remote procs will want this data */
-                if (OPAL_SUCCESS != (rc = opal_dss.pack(&bremote, &bptr, 1, OPAL_BUFFER))) {
-                    ORTE_ERROR_LOG(rc);
-                    OBJ_RELEASE(sig);
-                    OBJ_DESTRUCT(&blocal);
-                    OBJ_DESTRUCT(&bremote);
-                    goto cleanup;
-                }
-            }
-            if (OPAL_SUCCESS != (rc = opal_dstore.store(handle, &id, &kv))) {
-                ORTE_ERROR_LOG(rc);
-                OBJ_DESTRUCT(&kv);
-                OBJ_RELEASE(sig);
-                goto cleanup;
-            }
-            bptr->base_ptr = NULL;  // protect the data region
-            OBJ_RELEASE(bptr);
-            OBJ_DESTRUCT(&kv);
-            cnt = 1;
-        }
-        if (OPAL_ERR_UNPACK_READ_PAST_END_OF_BUFFER != rc) {
-            OPAL_ERROR_LOG(rc);
-        }
+
         /* mark that we recvd data for this proc */
         ORTE_FLAG_SET(pm->proc, ORTE_PROC_FLAG_DATA_RECVD);
         /* see if anyone is waiting for it - we send a response even if no data
