@@ -54,8 +54,9 @@ typedef struct {
 } pmix_server_pm_handler_t;
 OBJ_CLASS_DECLARATION(pmix_server_pm_handler_t);
 
-pmix_server_pm_handler_t *pmix_server_get_pm(orte_process_name_t name);
-int pmix_server_proc_info_pm(orte_process_name_t name, pmix_job_info_t *jinfo);
-int pmix_server_abort_pm(orte_process_name_t name, int ret);
+pmix_server_pm_handler_t *pmix_server_handler_pm(orte_process_name_t name);
+int pmix_server_proc_info_pm(pmix_server_pm_handler_t *pm, pmix_job_info_t *jinfo);
+void pmix_server_abort_pm(pmix_server_pm_handler_t *pm, int ret);
+void pmix_server_finalize_pm(pmix_server_pm_handler_t *pm);
 
 #endif // PMIX_PLATFORM_H

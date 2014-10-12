@@ -56,7 +56,7 @@ OBJ_CLASS_INSTANCE(pmix_server_pm_handler_t,
                    opal_object_t,
                    pm_hndl_con, pm_hndl_des);
 
-pmix_server_pm_handler_t *pmix_server_get_pm(orte_process_name_t name)
+pmix_server_pm_handler_t *pmix_server_handler_pm(orte_process_name_t name)
 {
     pmix_server_pm_handler_t *pm = OBJ_NEW(pmix_server_pm_handler_t);
 
@@ -77,19 +77,13 @@ pmix_server_pm_handler_t *pmix_server_get_pm(orte_process_name_t name)
     return pm;
 }
 
-int pmix_server_proc_info_pm(orte_process_name_t name, pmix_job_info_t *jinfo)
+int pmix_server_proc_info_pm(pmix_server_pm_handler_t *pm, pmix_job_info_t *jinfo)
 {
-    pmix_server_pm_handler_t *pm;
     orte_proc_t *pptr;
     int rc = 0;
     char *tmp;
     int i;
 
-    if( NULL != (pm = pmix_server_get_pm(name)) ){
-        rc = ORTE_ERR_NOT_FOUND;
-        ORTE_ERROR_LOG(rc);
-        return rc;
-    }
     /* mark the proc as having registered */
     ORTE_ACTIVATE_PROC_STATE(&pm->proc->name, ORTE_PROC_STATE_REGISTERED);
 
@@ -131,6 +125,7 @@ int pmix_server_proc_info_pm(orte_process_name_t name, pmix_job_info_t *jinfo)
 
     /* construct the list of local peers */
     char **list = NULL;
+    orte_process_name_t name;
     name.jobid = pm->jdata->jobid;
     name.vpid = 0;
     jinfo->peers_cpu_bmaps = OBJ_NEW(opal_buffer_t);
@@ -171,19 +166,17 @@ int pmix_server_proc_info_pm(orte_process_name_t name, pmix_job_info_t *jinfo)
     return ORTE_SUCCESS;
 }
 
-int pmix_server_abort_pm(orte_process_name_t name, int ret)
+void pmix_server_abort_pm(pmix_server_pm_handler_t *pm, int ret)
 {
-    pmix_server_pm_handler_t *pm;
-    int rc;
-
-    if( NULL != (pm = pmix_server_get_pm(name)) ){
-        rc = ORTE_ERR_NOT_FOUND;
-        ORTE_ERROR_LOG(rc);
-        return rc;
-    }
-
     pm->proc->exit_code = ret;
+    /* we will let the ODLS report this to errmgr when the proc exits, so
+     * send the release so the proc can depart */
     ORTE_FLAG_SET(pm->proc, ORTE_PROC_FLAG_ABORT);
     ORTE_UPDATE_EXIT_STATUS(ret);
-    return OPAL_SUCCESS;
+}
+
+void pmix_server_finalize_pm(pmix_server_pm_handler_t *pm)
+{
+    /* mark the proc as having deregistered */
+    ORTE_FLAG_SET(pm->proc, ORTE_PROC_FLAG_HAS_DEREG);
 }
