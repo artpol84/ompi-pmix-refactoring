@@ -45,10 +45,29 @@
 //#include "pmix_server.h"
 #include "pmix_server_internal.h"
 
+inline static int _proc_info(opal_buffer_t *reply, pmix_server_pm_handler_t *pm);
+
+int pmix_server_append_pending_dmx(pmix_server_pm_handler_t *pm, pmix_server_peer_t *peer,
+                               opal_identifier_t idreq, uint32_t tag);
+inline static int
+_track_unknown_proc(pmix_server_pm_handler_t *pm, pmix_server_peer_t *peer,
+                               opal_identifier_t idreq, uint32_t tag, opal_buffer_t **_reply);
+inline static int
+_reply_for_local_proc(pmix_server_pm_handler_t *pm, opal_identifier_t idreq,
+                                 opal_buffer_t **_reply);
+static inline int
+_reply_for_remote_proc(pmix_server_pm_handler_t *pm, opal_identifier_t idreq, opal_buffer_t **_reply);
+
+inline static orte_grpcomm_signature_t *_extract_signature(opal_buffer_t *xfer);
+inline static int _process_uri(opal_buffer_t *xfer);
+inline static int _process_kvps(pmix_server_pm_handler_t *pm, opal_buffer_t *xfer,
+                                orte_grpcomm_signature_t *sig,
+                                opal_buffer_t *blocal, opal_buffer_t *bremote, bool *_found);
+
 
 
 /* stuff proc attributes for sending back to a proc */
-int pmix_server_proc_info(opal_buffer_t *reply, pmix_server_pm_handler_t *pm)
+inline static int _proc_info(opal_buffer_t *reply, pmix_server_pm_handler_t *pm)
 {
     orte_process_name_t name;
     pmix_job_info_t jinfo;
@@ -159,14 +178,18 @@ pmix_server_append_pending_dmx(pmix_server_pm_handler_t *pm, pmix_server_peer_t 
 
     OBJ_RETAIN(peer);  // just to be safe
     req->peer = peer;
+    if( NULL == peer ){
+        req->proxy = pm->proc;
+    }
     req->target = idreq;
     req->tag = tag;
     opal_list_append(&pmix_server_pending_dmx_reqs, &req->super);
     return ORTE_SUCCESS;
 }
 
-inline static int _track_unknown_proc(pmix_server_pm_handler_t *pm, pmix_server_peer_t *peer,
-                               opal_identifier_t idreq, uint32_t tag, opal_buffer_t **_reply)
+inline static int
+_track_unknown_proc(pmix_server_pm_handler_t *pm, pmix_server_peer_t *peer,
+                    opal_identifier_t idreq, uint32_t tag, opal_buffer_t **_reply)
 {
     pmix_server_dmx_req_t *req;
     opal_buffer_t *reply = NULL;
@@ -238,8 +261,9 @@ err_cleanup:
     return rc;
 }
 
-inline static int _reply_for_local_proc(pmix_server_pm_handler_t *pm, opal_identifier_t idreq,
-                                 opal_buffer_t **_reply)
+inline static int
+_reply_for_local_proc(pmix_server_pm_handler_t *pm, opal_identifier_t idreq,
+                      opal_buffer_t **_reply)
 {
     opal_value_t *kvp = NULL, *kvp2 = NULL;
     opal_value_t kv, *kp = &kv;
@@ -579,6 +603,157 @@ err_cleanup:
     return rc;
 }
 
+inline static int _process_pending_dmx(pmix_server_pm_handler_t *pm, opal_identifier_t id,
+                                       opal_buffer_t *blocal, opal_buffer_t *bremote)
+{
+    pmix_server_dmx_req_t *req, *nextreq;
+    opal_buffer_t *reply = NULL;
+    opal_buffer_t buf, *bptr;
+    opal_value_t kv, *kp = &kv;
+
+    int rc = 0, ret;
+
+    /* see if anyone is waiting for it - we send a response even if no data
+     * was actually provided so we don't hang if no modex data is being given */
+    OPAL_LIST_FOREACH_SAFE(req, nextreq, &pmix_server_pending_dmx_reqs, pmix_server_dmx_req_t) {
+        if (id == req->target) {
+            /* yes - deliver a copy */
+            if( NULL == (reply = OBJ_NEW(opal_buffer_t)) ){
+               rc = ORTE_ERR_OUT_OF_RESOURCE;
+               ORTE_ERROR_LOG(rc);
+               goto err_cleanup;
+            }
+
+            if (NULL == req->proxy) {
+                /* pack the status */
+                ret = OPAL_SUCCESS;
+                if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &ret, 1, OPAL_INT))) {
+                    ORTE_ERROR_LOG(rc);
+                    goto err_cleanup;
+                }
+                /* always pass the hostname */
+                OBJ_CONSTRUCT(&buf, opal_buffer_t);
+                PMIX_ADD_KP(kp, reply, PMIX_HOSTNAME, string, strdup(orte_process_info.nodename),
+                            err_add_kv );
+
+                /* pack the hostname blob */
+                bptr = &buf;
+                if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &bptr, 1, OPAL_BUFFER))) {
+                    ORTE_ERROR_LOG(rc);
+                    goto err_add_kv;
+                }
+                OBJ_DESTRUCT(&buf);
+                /* pass the local blob(s) */
+                opal_dss.copy_payload(reply, blocal);
+
+                // TODO: portable send!
+                /* use the PMIX send to return the data */
+                PMIX_SERVER_QUEUE_SEND(req->peer, req->tag, reply);
+                reply = NULL;
+            } else {
+                /* pack the id of the requested proc */
+                if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &id, 1, OPAL_UINT64))) {
+                    ORTE_ERROR_LOG(rc);
+                    goto err_cleanup;
+                }
+                /* pack the status */
+                ret = OPAL_SUCCESS;
+                if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &ret, 1, OPAL_INT))) {
+                    ORTE_ERROR_LOG(rc);
+                    goto err_cleanup;
+                }
+                /* always pass the hostname */
+                OBJ_CONSTRUCT(&buf, opal_buffer_t);
+                PMIX_ADD_KP(kp, reply, PMIX_HOSTNAME, string, strdup(orte_process_info.nodename),
+                            err_add_kv );
+                /* pack the hostname blob */
+                bptr = &buf;
+                if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &bptr, 1, OPAL_BUFFER))) {
+                    ORTE_ERROR_LOG(rc);
+                    goto err_add_kv;
+                }
+                OBJ_DESTRUCT(&buf);
+                /* pass the remote blob(s) */
+                opal_dss.copy_payload(reply, bremote);
+                /* use RML to send the response */
+                orte_rml.send_buffer_nb(&req->proxy->name, reply,
+                                        ORTE_RML_TAG_DIRECT_MODEX_RESP,
+                                        orte_rml_send_callback, NULL);
+                reply = NULL;
+            }
+            opal_list_remove_item(&pmix_server_pending_dmx_reqs, &req->super);
+            OBJ_RELEASE(req);
+        }
+    }
+    return ORTE_SUCCESS;
+err_add_kv:
+    OBJ_DESTRUCT(&buf);
+err_cleanup:
+    if( NULL != reply ){
+        OBJ_RELEASE(reply);
+    }
+    return rc;
+}
+
+
+inline static int _self_notification(pmix_server_pm_handler_t *pm, opal_identifier_t id,
+                                     pmix_server_peer_t *peer, uint32_t tag,
+                                     orte_grpcomm_signature_t *sig, bool found,
+                                     opal_buffer_t *saved )
+{
+    int rc = ORTE_SUCCESS;
+    opal_buffer_t *reply = NULL;
+    opal_buffer_t *bptr = 0;
+
+    /* send notification to myself */
+    if( NULL == (reply = OBJ_NEW(opal_buffer_t) ) ){
+        rc = ORTE_ERR_OUT_OF_RESOURCE;
+        ORTE_ERROR_LOG(rc);
+        goto cleanup;
+    }
+
+    /* pack the id of the sender */
+    if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &id, 1, OPAL_UINT64))) {
+        ORTE_ERROR_LOG(rc);
+        goto cleanup;
+    }
+    /* pack the socket of the sender */
+    if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &peer->sd, 1, OPAL_INT32))) {
+        ORTE_ERROR_LOG(rc);
+        goto cleanup;
+    }
+    /* pass the tag that this sender is sitting on */
+    if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &tag, 1, OPAL_UINT32))) {
+        ORTE_ERROR_LOG(rc);
+        goto cleanup;
+    }
+    /* pack the signature */
+    if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &sig, 1, ORTE_SIGNATURE))) {
+        ORTE_ERROR_LOG(rc);
+        goto cleanup;
+    }
+
+    /* include any data that is to be globally shared */
+    if (found && 0 < saved->bytes_used) {
+        bptr = saved;
+        if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &bptr, 1, OPAL_BUFFER))) {
+            ORTE_ERROR_LOG(rc);
+            goto cleanup;
+        }
+    }
+
+    /* send it to myself for processing */
+    orte_rml.send_buffer_nb(ORTE_PROC_MY_NAME, reply,
+                            ORTE_RML_TAG_DAEMON_COLL,
+                            orte_rml_send_callback, NULL);
+    reply = NULL;
+cleanup:
+    if( NULL != reply ){
+        OBJ_RELEASE(reply);
+    }
+    return rc;
+}
+
 /*
  * Dispatch to the appropriate action routine based on the state
  * of the connection with the peer.
@@ -595,10 +770,8 @@ void pmix_server_process_peer(pmix_server_peer_t *peer)
     orte_process_name_t name;
     pmix_server_pm_handler_t *pm;
     uint32_t tag;
-
-    pmix_server_dmx_req_t *req, *nextreq;
     bool found;
-    orte_grpcomm_signature_t *sig;
+    orte_grpcomm_signature_t *sig = NULL;
 
     /* xfer the message to a buffer for unpacking */
     OBJ_CONSTRUCT(&xfer, opal_buffer_t);
@@ -679,14 +852,10 @@ void pmix_server_process_peer(pmix_server_peer_t *peer)
             free(tmp);
         }
 
-        if( ORTE_SUCCESS != _process_uri(&xfer)){
+        if( ORTE_SUCCESS != (rc = _process_uri(&xfer) ) ){
             // TODO: In this case we need to reply with error!
+            ORTE_ERROR_LOG(rc);
             goto reply_fence;
-        }
-
-        if( ORTE_SUCCESS != _process_kvps(pm, &xfer, sig, &blocal, &bremote, &found) ){
-            OBJ_RELEASE(sig);
-            goto cleanup;
         }
 
         /* if we are in a group collective mode, then we need to prep
@@ -699,145 +868,32 @@ void pmix_server_process_peer(pmix_server_peer_t *peer)
         }
         /* if data was given, unpack and store it in the pmix dstore - it is okay
          * if there was no data, it's just a fence */
+        rc = _process_kvps(pm, &xfer, sig, &blocal, &bremote, &found);
+        if( ORTE_SUCCESS != rc ){
+            ORTE_ERROR_LOG(rc);
+            goto err_free_save;
+        }
 
         /* mark that we recvd data for this proc */
         ORTE_FLAG_SET(pm->proc, ORTE_PROC_FLAG_DATA_RECVD);
-        /* see if anyone is waiting for it - we send a response even if no data
-         * was actually provided so we don't hang if no modex data is being given */
-        OPAL_LIST_FOREACH_SAFE(req, nextreq, &pmix_server_pending_dmx_reqs, pmix_server_dmx_req_t) {
-            if (id == req->target) {
-                /* yes - deliver a copy */
-                reply = OBJ_NEW(opal_buffer_t);
-                if (NULL == req->proxy) {
-                    /* pack the status */
-                    ret = OPAL_SUCCESS;
-                    if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &ret, 1, OPAL_INT))) {
-                        ORTE_ERROR_LOG(rc);
-                        OBJ_RELEASE(reply);
-                        return;
-                    }
-                    /* always pass the hostname */
-                    OBJ_CONSTRUCT(&buf, opal_buffer_t);
-                    OBJ_CONSTRUCT(&kv, opal_value_t);
-                    kv.key = strdup(PMIX_HOSTNAME);
-                    kv.type = OPAL_STRING;
-                    kv.data.string = strdup(orte_process_info.nodename);
-                    kp = &kv;
-                    if (OPAL_SUCCESS != (rc = opal_dss.pack(&buf, &kp, 1, OPAL_VALUE))) {
-                        ORTE_ERROR_LOG(rc);
-                        OBJ_RELEASE(reply);
-                        OBJ_DESTRUCT(&buf);
-                        OBJ_DESTRUCT(&kv);
-                        return;
-                    }
-                    OBJ_DESTRUCT(&kv);
-                    /* pack the hostname blob */
-                    bptr = &buf;
-                    if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &bptr, 1, OPAL_BUFFER))) {
-                        ORTE_ERROR_LOG(rc);
-                        OBJ_DESTRUCT(&buf);
-                        goto cleanup;
-                    }
-                    OBJ_DESTRUCT(&buf);
-                    /* pass the local blob(s) */
-                    opal_dss.copy_payload(reply, &blocal);
-                    /* use the PMIX send to return the data */
-                    PMIX_SERVER_QUEUE_SEND(req->peer, req->tag, reply);
-                } else {
-                    /* pack the id of the requested proc */
-                    if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &id, 1, OPAL_UINT64))) {
-                        ORTE_ERROR_LOG(rc);
-                        OBJ_RELEASE(sig);
-                        goto cleanup;
-                    }
-                    /* pack the status */
-                    ret = OPAL_SUCCESS;
-                    if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &ret, 1, OPAL_INT))) {
-                        ORTE_ERROR_LOG(rc);
-                        goto cleanup;
-                    }
-                    /* always pass the hostname */
-                    OBJ_CONSTRUCT(&buf, opal_buffer_t);
-                    OBJ_CONSTRUCT(&kv, opal_value_t);
-                    kv.key = strdup(PMIX_HOSTNAME);
-                    kv.type = OPAL_STRING;
-                    kv.data.string = strdup(orte_process_info.nodename);
-                    kp = &kv;
-                    if (OPAL_SUCCESS != (rc = opal_dss.pack(&buf, &kp, 1, OPAL_VALUE))) {
-                        OBJ_DESTRUCT(&buf);
-                        OBJ_DESTRUCT(&kv);
-                        ORTE_ERROR_LOG(rc);
-                        goto cleanup;
-                    }
-                    OBJ_DESTRUCT(&kv);
-                    /* pack the hostname blob */
-                    bptr = &buf;
-                    if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &bptr, 1, OPAL_BUFFER))) {
-                        ORTE_ERROR_LOG(rc);
-                        OBJ_DESTRUCT(&buf);
-                        goto cleanup;
-                    }
-                    OBJ_DESTRUCT(&buf);
-                    /* pass the remote blob(s) */
-                    opal_dss.copy_payload(reply, &bremote);
-                    /* use RML to send the response */
-                    orte_rml.send_buffer_nb(&req->proxy->name, reply,
-                                            ORTE_RML_TAG_DIRECT_MODEX_RESP,
-                                            orte_rml_send_callback, NULL);
-                }
-                opal_list_remove_item(&pmix_server_pending_dmx_reqs, &req->super);
-                OBJ_RELEASE(req);
-            }
-        }
+
+        rc = _process_pending_dmx(pm, id, &blocal, &bremote);
+        // Free them anyway
         OBJ_DESTRUCT(&blocal);
         OBJ_DESTRUCT(&bremote);
+        // Delayed check
+        if( ORTE_SUCCESS != rc ){
+            ORTE_ERROR_LOG(rc);
+            goto cleanup;
+        }
 
-        /* send notification to myself */
-        reply = OBJ_NEW(opal_buffer_t);
-        /* pack the id of the sender */
-        if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &id, 1, OPAL_UINT64))) {
+        rc = _self_notification(pm, id, peer, tag, sig, found, &save );
+        if( OPAL_SUCCESS != rc ){
             ORTE_ERROR_LOG(rc);
-            OBJ_RELEASE(reply);
-            OBJ_RELEASE(sig);
-            goto reply_fence;
-        }
-        /* pack the socket of the sender */
-        if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &peer->sd, 1, OPAL_INT32))) {
-            ORTE_ERROR_LOG(rc);
-            OBJ_RELEASE(reply);
-            OBJ_RELEASE(sig);
-            goto reply_fence;
-        }
-        /* pass the tag that this sender is sitting on */
-        if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &tag, 1, OPAL_UINT32))) {
-            ORTE_ERROR_LOG(rc);
-            OBJ_RELEASE(reply);
-            OBJ_RELEASE(sig);
-            goto reply_fence;
-        }
-        /* pack the signature */
-        if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &sig, 1, ORTE_SIGNATURE))) {
-            ORTE_ERROR_LOG(rc);
-            OBJ_RELEASE(reply);
-            OBJ_RELEASE(sig);
-            goto reply_fence;
-        }
-        OBJ_RELEASE(sig);
-        /* include any data that is to be globally shared */
-        if (found && 0 < save.bytes_used) {
-            bptr = &save;
-            if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &bptr, 1, OPAL_BUFFER))) {
-                ORTE_ERROR_LOG(rc);
-                OBJ_RELEASE(reply);
-                goto reply_fence;
-            }
+            goto err_free_save;
         }
         OBJ_DESTRUCT(&save);
-        /* send it to myself for processing */
-        orte_rml.send_buffer_nb(ORTE_PROC_MY_NAME, reply,
-                                ORTE_RML_TAG_DAEMON_COLL,
-                                orte_rml_send_callback, NULL);
-        return;
+        goto cleanup;
     reply_fence:
         if (PMIX_FENCE_CMD == cmd) {
             /* send a release message back to the sender so they don't hang */
@@ -849,9 +905,10 @@ void pmix_server_process_peer(pmix_server_peer_t *peer)
             }
             goto reply_to_peer;
         }
-        OBJ_DESTRUCT(&xfer);
-        return;
-
+        goto cleanup;
+    err_free_save:
+        OBJ_DESTRUCT(&save);
+        goto cleanup;
     case PMIX_GET_CMD:
         /* unpack the id of the proc whose data is being requested */
         cnt = 1;
@@ -908,7 +965,7 @@ void pmix_server_process_peer(pmix_server_peer_t *peer)
         // FIXME: Probably remote peer wants out answer anyway!
         //          We should pack ret in any case!
         /* stuff the values corresponding to the list of supported attrs */
-        if (ORTE_SUCCESS != (ret = pmix_server_proc_info(&buf, pm))) {
+        if (ORTE_SUCCESS != (ret = _proc_info(&buf, pm))) {
             ORTE_ERROR_LOG(ret);
             goto cleanup;
         }
@@ -942,6 +999,9 @@ reply_to_peer:
 cleanup:
     if( NULL != reply ){
         OBJ_RELEASE(reply);
+    }
+    if( NULL != sig ){
+        OBJ_RELEASE(sig);
     }
     if( NULL != pm ){
         OBJ_RELEASE(pm);

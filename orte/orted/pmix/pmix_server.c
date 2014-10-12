@@ -109,6 +109,24 @@ static OBJ_CLASS_INSTANCE(pmix_server_trk_t,
                           opal_list_item_t,
                           trkcon, trkdes);
 
+static void rqcon(pmix_server_dmx_req_t *p)
+{
+    p->peer = NULL;
+    p->proxy = NULL;
+}
+static void rqdes(pmix_server_dmx_req_t *p)
+{
+    if (NULL != p->peer) {
+        OBJ_RELEASE(p->peer);
+    }
+    if (NULL != p->proxy) {
+        OBJ_RELEASE(p->proxy);
+    }
+}
+OBJ_CLASS_INSTANCE(pmix_server_dmx_req_t,
+                   opal_list_item_t,
+                   rqcon, rqdes);
+
 /*
  * Local utility functions
  */
@@ -848,21 +866,3 @@ void pmix_server_peer_dump(pmix_server_peer_t* peer, const char* msg)
     opal_output(0, "%s", buff);
 }
 
-
-static void rqcon(pmix_server_dmx_req_t *p)
-{
-    p->peer = NULL;
-    p->proxy = NULL;
-}
-static void rqdes(pmix_server_dmx_req_t *p)
-{
-    if (NULL != p->peer) {
-        OBJ_RELEASE(p->peer);
-    }
-    if (NULL != p->proxy) {
-        OBJ_RELEASE(p->proxy);
-    }
-}
-OBJ_CLASS_INSTANCE(pmix_server_dmx_req_t,
-                   opal_list_item_t,
-                   rqcon, rqdes);

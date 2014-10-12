@@ -131,13 +131,11 @@ extern int pmix_server_send_connect_ack(pmix_server_peer_t* peer);
 extern int pmix_server_recv_connect_ack(int sd, pmix_server_hdr_t *dhdr);
 
 // Processing functions
-int pmix_server_proc_info(opal_buffer_t *reply, pmix_server_pm_handler_t *pm);
 void pmix_server_process_peer(pmix_server_peer_t *peer);
 
 // TODO: make static inline in next commits
-int
-pmix_server_append_pending_dmx(pmix_server_pm_handler_t *pm, pmix_server_peer_t *peer,
-                               opal_identifier_t idreq, uint32_t tag);
+int pmix_server_append_pending_dmx(pmix_server_pm_handler_t *pm, pmix_server_peer_t *peer,
+                                   opal_identifier_t idreq, uint32_t tag);
 
 
 /* exposed shared variables */
