@@ -45,64 +45,7 @@
 //#include "pmix_server.h"
 #include "pmix_server_internal.h"
 
-#define PMIX_KV_FIELD_uint32(x) (x->data.uint32)
-#define PMIX_KV_FIELD_uint16(x) (x->data.uint16)
-#define PMIX_KV_FIELD_string(x) (x->data.string)
 
-#define PMIX_KV_TYPE_uint32 OPAL_UINT32
-#define PMIX_KV_TYPE_uint16 OPAL_UINT16
-#define PMIX_KV_TYPE_string OPAL_STRING
-
-#define PMIX_ADD_KP_simple(_kp, _reply, _key, _field, _val, __eext )   \
-{                                           \
-    OBJ_CONSTRUCT(_kp, opal_value_t);       \
-    _kp->key = strdup(_key);                \
-    if( NULL == _kp->key ) {                \
-        rc = ORTE_ERR_OUT_OF_RESOURCE;      \
-        ORTE_ERROR_LOG(rc);                 \
-        OBJ_DESTRUCT(kp);                   \
-        goto __eext;                        \
-    }                                       \
-    _kp->type = PMIX_KV_TYPE_ ## _field;    \
-    PMIX_KV_FIELD_ ## _field(_kp) = _val;   \
-    if (OPAL_SUCCESS != (rc = opal_dss.pack(_reply, &_kp, 1, OPAL_VALUE))) {  \
-        ORTE_ERROR_LOG(rc);                 \
-        OBJ_DESTRUCT(kp);                   \
-        free(_kp->key);                     \
-        goto __eext;                        \
-    }                                       \
-    OBJ_DESTRUCT(kp);                       \
-}
-
-#define PMIX_ADD_KP_free_val(_kp, _reply, _key, _field, _val, __eext )   \
-{                                           \
-    OBJ_CONSTRUCT(_kp, opal_value_t);       \
-    _kp->key = strdup(_key);                \
-    if( NULL == _kp->key ) {                \
-        rc = ORTE_ERR_OUT_OF_RESOURCE;      \
-        ORTE_ERROR_LOG(rc);                 \
-        OBJ_DESTRUCT(kp);                   \
-        goto __eext;                        \
-    }                                       \
-    _kp->type = PMIX_KV_TYPE_ ## _field;    \
-    PMIX_KV_FIELD_ ## _field(_kp) = _val;   \
-    if (OPAL_SUCCESS != (rc = opal_dss.pack(_reply, &_kp, 1, OPAL_VALUE))) {  \
-        ORTE_ERROR_LOG(rc);                 \
-        OBJ_DESTRUCT(kp);                   \
-        free(_kp->key);                     \
-        free(_val);                         \
-        goto __eext;                        \
-    }                                       \
-    OBJ_DESTRUCT(kp);                       \
-}
-
-
-#define PMIX_ADD_KP_uint32 PMIX_ADD_KP_simple
-#define PMIX_ADD_KP_uint16 PMIX_ADD_KP_simple
-#define PMIX_ADD_KP_string PMIX_ADD_KP_free_val
-
-#define PMIX_ADD_KP(_kp, _reply, _key, _field, _val, __eext )   \
-    PMIX_ADD_KP_ ## _field(_kp, _reply, _key, _field, _val, __eext)
 
 /* stuff proc attributes for sending back to a proc */
 int pmix_server_proc_info(opal_buffer_t *reply, pmix_server_pm_handler_t *pm)
@@ -199,11 +142,33 @@ err_exit:
     return rc;
 }
 
+int
+pmix_server_append_pending_dmx(pmix_server_pm_handler_t *pm, pmix_server_peer_t *peer,
+                               opal_identifier_t idreq, uint32_t tag)
+{
+    pmix_server_dmx_req_t *req = NULL;
+    int rc;
+
+    /* track the request */
+    req = OBJ_NEW(pmix_server_dmx_req_t);
+    if( NULL == req ){
+        rc = ORTE_ERR_OUT_OF_RESOURCE;
+        ORTE_ERROR_LOG(rc);
+        return rc;
+    }
+
+    OBJ_RETAIN(peer);  // just to be safe
+    req->peer = peer;
+    req->target = idreq;
+    req->tag = tag;
+    opal_list_append(&pmix_server_pending_dmx_reqs, &req->super);
+    return ORTE_SUCCESS;
+}
 
 inline static int _track_unknown_proc(pmix_server_pm_handler_t *pm, pmix_server_peer_t *peer,
                                opal_identifier_t idreq, uint32_t tag, opal_buffer_t **_reply)
 {
-    pmix_server_dmx_req_t *req = NULL;
+    pmix_server_dmx_req_t *req;
     opal_buffer_t *reply = NULL;
     bool found = false;
     int rc, ret;
@@ -221,19 +186,10 @@ inline static int _track_unknown_proc(pmix_server_pm_handler_t *pm, pmix_server_
             break;
         }
     }
-    /* track the request */
-    req = OBJ_NEW(pmix_server_dmx_req_t);
-    if( NULL == req ){
-        rc = ORTE_ERR_OUT_OF_RESOURCE;
-        ORTE_ERROR_LOG(rc);
+
+    if( ORTE_SUCCESS != pmix_server_append_pending_dmx(pm, peer, idreq, tag) ){
         goto err_cleanup;
     }
-
-    OBJ_RETAIN(peer);  // just to be safe
-    req->peer = peer;
-    req->target = idreq;
-    req->tag = tag;
-    opal_list_append(&pmix_server_pending_dmx_reqs, &req->super);
 
     if (!found) {
         /* this is a new tracker - see if we need to send a data

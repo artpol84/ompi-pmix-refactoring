@@ -77,4 +77,65 @@ typedef struct {
     char *peers_list;
 } pmix_job_info_t;
 
+//
+
+#define PMIX_KV_FIELD_uint32(x) (x->data.uint32)
+#define PMIX_KV_FIELD_uint16(x) (x->data.uint16)
+#define PMIX_KV_FIELD_string(x) (x->data.string)
+
+#define PMIX_KV_TYPE_uint32 OPAL_UINT32
+#define PMIX_KV_TYPE_uint16 OPAL_UINT16
+#define PMIX_KV_TYPE_string OPAL_STRING
+
+#define PMIX_ADD_KP_simple(_kp, _reply, _key, _field, _val, __eext )   \
+{                                           \
+    OBJ_CONSTRUCT(_kp, opal_value_t);       \
+    _kp->key = strdup(_key);                \
+    if( NULL == _kp->key ) {                \
+        rc = ORTE_ERR_OUT_OF_RESOURCE;      \
+        ORTE_ERROR_LOG(rc);                 \
+        OBJ_DESTRUCT(kp);                   \
+        goto __eext;                        \
+    }                                       \
+    _kp->type = PMIX_KV_TYPE_ ## _field;    \
+    PMIX_KV_FIELD_ ## _field(_kp) = _val;   \
+    if (OPAL_SUCCESS != (rc = opal_dss.pack(_reply, &_kp, 1, OPAL_VALUE))) {  \
+        ORTE_ERROR_LOG(rc);                 \
+        OBJ_DESTRUCT(kp);                   \
+        free(_kp->key);                     \
+        goto __eext;                        \
+    }                                       \
+    OBJ_DESTRUCT(kp);                       \
+}
+
+#define PMIX_ADD_KP_free_val(_kp, _reply, _key, _field, _val, __eext )   \
+{                                           \
+    OBJ_CONSTRUCT(_kp, opal_value_t);       \
+    _kp->key = strdup(_key);                \
+    if( NULL == _kp->key ) {                \
+        rc = ORTE_ERR_OUT_OF_RESOURCE;      \
+        ORTE_ERROR_LOG(rc);                 \
+        OBJ_DESTRUCT(kp);                   \
+        goto __eext;                        \
+    }                                       \
+    _kp->type = PMIX_KV_TYPE_ ## _field;    \
+    PMIX_KV_FIELD_ ## _field(_kp) = _val;   \
+    if (OPAL_SUCCESS != (rc = opal_dss.pack(_reply, &_kp, 1, OPAL_VALUE))) {  \
+        ORTE_ERROR_LOG(rc);                 \
+        OBJ_DESTRUCT(kp);                   \
+        free(_kp->key);                     \
+        free(_val);                         \
+        goto __eext;                        \
+    }                                       \
+    OBJ_DESTRUCT(kp);                       \
+}
+
+
+#define PMIX_ADD_KP_uint32 PMIX_ADD_KP_simple
+#define PMIX_ADD_KP_uint16 PMIX_ADD_KP_simple
+#define PMIX_ADD_KP_string PMIX_ADD_KP_free_val
+
+#define PMIX_ADD_KP(_kp, _reply, _key, _field, _val, __eext )   \
+    PMIX_ADD_KP_ ## _field(_kp, _reply, _key, _field, _val, __eext)
+
 #endif // PMIX_BASIC_H
