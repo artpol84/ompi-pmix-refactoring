@@ -174,6 +174,7 @@ void pmix_server_process_peer(pmix_server_peer_t *peer)
     opal_value_t kv, *kvp, *kvp2, *kp;
     opal_identifier_t id, idreq;
     orte_process_name_t name;
+    pmix_server_pm_handler_t *pm;
     orte_job_t *jdata;
     orte_proc_t *proc;
     opal_list_t values;
@@ -218,20 +219,14 @@ void pmix_server_process_peer(pmix_server_peer_t *peer)
         /* don't bother to unpack the message - we ignore this for now as the
          * proc should have emitted it for itself */
         memcpy(&name, &id, sizeof(orte_process_name_t));
-        /* go find the proc structure for this process */
-        if (NULL == (jdata = orte_get_job_data_object(name.jobid))) {
-            ORTE_ERROR_LOG(ORTE_ERR_NOT_FOUND);
-        } else {
-            if (NULL == (proc = (orte_proc_t*)opal_pointer_array_get_item(jdata->procs, name.vpid))) {
-                ORTE_ERROR_LOG(ORTE_ERR_NOT_FOUND);
-            } else {
-                proc->exit_code = ret;
-                ORTE_FLAG_SET(proc, ORTE_PROC_FLAG_ABORT);
-                ORTE_UPDATE_EXIT_STATUS(ret);
-            }
-        }
         /* we will let the ODLS report this to errmgr when the proc exits, so
          * send the release so the proc can depart */
+
+        if( OPAL_SUCCESS != ( rc = pmix_server_abort_pm(name, ret)) ){
+            ORTE_ERROR_LOG(rc);
+            return rc;
+        }
+
         reply = OBJ_NEW(opal_buffer_t);
         /* pack the tag */
         if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &tag, 1, OPAL_UINT32))) {
@@ -240,8 +235,11 @@ void pmix_server_process_peer(pmix_server_peer_t *peer)
             OBJ_DESTRUCT(&xfer);
             return;
         }
+
+        // TODO: incapsulate in platform
         PMIX_SERVER_QUEUE_SEND(peer, tag, reply);
         OBJ_DESTRUCT(&xfer);
+        //------------------------------
         return;
     case PMIX_FENCE_CMD:
     case PMIX_FENCENB_CMD:
@@ -252,16 +250,13 @@ void pmix_server_process_peer(pmix_server_peer_t *peer)
                             OPAL_NAME_PRINT(id), tag);
         /* get the job and proc objects for the sender */
         memcpy((char*)&name, (char*)&id, sizeof(orte_process_name_t));
-        if (NULL == (jdata = orte_get_job_data_object(name.jobid))) {
-            ORTE_ERROR_LOG(ORTE_ERR_NOT_FOUND);
-            OBJ_DESTRUCT(&xfer);
-            return;
+
+        if( NULL != (pm = pmix_server_get_pm(name)) ){
+            rc = ORTE_ERR_NOT_FOUND;
+            ORTE_ERROR_LOG(rc);
+            return rc;
         }
-        if (NULL == (proc = (orte_proc_t*)opal_pointer_array_get_item(jdata->procs, name.vpid))) {
-            ORTE_ERROR_LOG(ORTE_ERR_NOT_FOUND);
-            OBJ_DESTRUCT(&xfer);
-            return;
-        }
+
         /* setup a signature object */
         sig = OBJ_NEW(orte_grpcomm_signature_t);
         /* get the number of procs in this fence collective */

@@ -42,33 +42,56 @@
 #include "orte/orted/pmix/pmix_basic.h"
 #include "pmix_platform.h"
 
+static void pm_hndl_con(pmix_server_pm_handler_t *p)
+{
+    p->proc  = NULL;
+    p->app   = NULL;
+    p->jdata = NULL;
+    p->node  = NULL;
+}
+static void pm_hndl_des(pmix_server_pm_handler_t *p)
+{
+}
+OBJ_CLASS_INSTANCE(pmix_server_pm_handler_t,
+                   opal_object_t,
+                   pm_hndl_con, pm_hndl_des);
+
+pmix_server_pm_handler_t *pmix_server_get_pm(orte_process_name_t name)
+{
+    pmix_server_pm_handler_t *pm = OBJ_NEW(pmix_server_pm_handler_t);
+
+    if (NULL == (pm->jdata = orte_get_job_data_object(name.jobid))) {
+        OBJ_RELEASE(pm);
+        return NULL;
+    }
+
+    if (NULL == (pm->proc = (orte_proc_t*)opal_pointer_array_get_item(pm->jdata->procs, name.vpid))) {
+        OBJ_RELEASE(pm);
+        return NULL;
+    }
+
+    /* convenience def */
+    pm->node = pm->proc->node;
+    pm->app = (orte_app_context_t*)opal_pointer_array_get_item(pm->jdata->apps, pm->proc->app_idx);
+
+    return pm;
+}
+
 int pmix_server_proc_info_pm(orte_process_name_t name, pmix_job_info_t *jinfo)
 {
-    orte_job_t *jdata;
-    orte_proc_t *proc;
-    orte_node_t *node = NULL;
-    orte_app_context_t *app;
+    pmix_server_pm_handler_t *pm;
     orte_proc_t *pptr;
     int rc = 0;
     char *tmp;
     int i;
 
-    if (NULL == (jdata = orte_get_job_data_object(name.jobid))) {
-        ORTE_ERROR_LOG(ORTE_ERR_NOT_FOUND);
-        return ORTE_ERR_NOT_FOUND;
+    if( NULL != (pm = pmix_server_get_pm(name)) ){
+        rc = ORTE_ERR_NOT_FOUND;
+        ORTE_ERROR_LOG(rc);
+        return rc;
     }
-
-    if (NULL == (proc = (orte_proc_t*)opal_pointer_array_get_item(jdata->procs, name.vpid))) {
-        ORTE_ERROR_LOG(ORTE_ERR_NOT_FOUND);
-        return ORTE_ERR_NOT_FOUND;
-    }
-
     /* mark the proc as having registered */
-    ORTE_ACTIVATE_PROC_STATE(&proc->name, ORTE_PROC_STATE_REGISTERED);
-
-    /* convenience def */
-    node = proc->node;
-    app = (orte_app_context_t*)opal_pointer_array_get_item(jdata->apps, proc->app_idx);
+    ORTE_ACTIVATE_PROC_STATE(&pm->proc->name, ORTE_PROC_STATE_REGISTERED);
 
     jinfo->hwloc_on = false;
 #if OPAL_HAVE_HWLOC
@@ -87,35 +110,35 @@ int pmix_server_proc_info_pm(orte_process_name_t name, pmix_job_info_t *jinfo)
 
     /* cpuset */
     jinfo->cpu_bmap = NULL;
-    if ( !orte_get_attribute(&proc->attributes, ORTE_PROC_CPU_BITMAP, (void**)&jinfo->cpu_bmap, OPAL_STRING) ) {
+    if ( !orte_get_attribute(&pm->proc->attributes, ORTE_PROC_CPU_BITMAP, (void**)&jinfo->cpu_bmap, OPAL_STRING) ) {
         jinfo->cpu_bmap = NULL;
     }
 
-    jinfo->jobid = proc->name.jobid;
-    jinfo->app_num = proc->app_idx;
-    jinfo->rank = proc->name.vpid;
-    jinfo->glob_rank = proc->name.vpid + jdata->offset;
-    jinfo->app_rank = proc->app_rank;
-    jinfo->loc_rank = proc->local_rank;
-    jinfo->node_rank = proc->node_rank;
-    jinfo->nproc_offs = jdata->offset;
-    jinfo->usize = jdata->num_procs;
-    jinfo->size = jdata->num_procs;
-    jinfo->loc_size = jdata->num_local_procs;
-    jinfo->max_procs = jdata->total_slots_alloc;
-    jinfo->app_ldr = app->first_rank;
-    jinfo->node_size = node->num_procs;
+    jinfo->jobid = pm->proc->name.jobid;
+    jinfo->app_num = pm->proc->app_idx;
+    jinfo->rank = pm->proc->name.vpid;
+    jinfo->glob_rank = pm->proc->name.vpid + pm->jdata->offset;
+    jinfo->app_rank = pm->proc->app_rank;
+    jinfo->loc_rank = pm->proc->local_rank;
+    jinfo->node_rank = pm->proc->node_rank;
+    jinfo->nproc_offs = pm->jdata->offset;
+    jinfo->usize = pm->jdata->num_procs;
+    jinfo->size = pm->jdata->num_procs;
+    jinfo->loc_size = pm->jdata->num_local_procs;
+    jinfo->max_procs = pm->jdata->total_slots_alloc;
+    jinfo->app_ldr = pm->app->first_rank;
+    jinfo->node_size = pm->node->num_procs;
 
     /* construct the list of local peers */
     char **list = NULL;
-    name.jobid = jdata->jobid;
+    name.jobid = pm->jdata->jobid;
     name.vpid = 0;
     jinfo->peers_cpu_bmaps = OBJ_NEW(opal_buffer_t);
-    for (i=0; i < node->procs->size; i++) {
-        if (NULL == (pptr = (orte_proc_t*)opal_pointer_array_get_item(node->procs, i))) {
+    for (i=0; i < pm->node->procs->size; i++) {
+        if (NULL == (pptr = (orte_proc_t*)opal_pointer_array_get_item(pm->node->procs, i))) {
             continue;
         }
-        if (pptr->name.jobid == jdata->jobid) {
+        if (pptr->name.jobid == pm->jdata->jobid) {
             opal_argv_append_nosize(&list, ORTE_VPID_PRINT(pptr->name.vpid));
             if (pptr->name.vpid < name.vpid) {
                 name.vpid = pptr->name.vpid;
@@ -146,4 +169,21 @@ int pmix_server_proc_info_pm(orte_process_name_t name, pmix_job_info_t *jinfo)
     jinfo->peers_list = tmp;
 
     return ORTE_SUCCESS;
+}
+
+int pmix_server_abort_pm(orte_process_name_t name, int ret)
+{
+    pmix_server_pm_handler_t *pm;
+    int rc;
+
+    if( NULL != (pm = pmix_server_get_pm(name)) ){
+        rc = ORTE_ERR_NOT_FOUND;
+        ORTE_ERROR_LOG(rc);
+        return rc;
+    }
+
+    pm->proc->exit_code = ret;
+    ORTE_FLAG_SET(pm->proc, ORTE_PROC_FLAG_ABORT);
+    ORTE_UPDATE_EXIT_STATUS(ret);
+    return OPAL_SUCCESS;
 }
