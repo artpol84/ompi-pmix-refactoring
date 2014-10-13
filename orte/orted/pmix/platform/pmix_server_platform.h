@@ -39,6 +39,9 @@
 BEGIN_C_DECLS
 
 typedef struct {
+    /** Parent object */
+    opal_object_t super;
+
     orte_process_name_t name;
     orte_job_t *jdata;
     orte_proc_t *proc;
