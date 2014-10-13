@@ -358,7 +358,7 @@ _reply_for_local_proc(pmix_server_pm_handler_t *pm, opal_identifier_t idreq,
     if (NULL != kvp2) {
         opal_output_verbose(2, pmix_server_output,
                             "%s passing global blob of size %d from proc %s to proc %s",
-                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), (int)kvp->data.bo.size,
+                            ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), (int)kvp2->data.bo.size,
                             ORTE_NAME_PRINT((orte_process_name_t*)&idreq), ORTE_NAME_PRINT(&pm->name));
         OBJ_CONSTRUCT(&buf, opal_buffer_t);
         opal_dss.load(&buf, kvp2->data.bo.bytes, kvp2->data.bo.size);
