@@ -54,8 +54,8 @@
 #include "orte/orted/pmix/pmix_server_basic.h"
 #include "pmix_server_peer.h"
 
-// TODO: This temporal solution to proceed. This should be inside platform coz it is ompi-specific.
-// We need to put all debug here.
+/* TODO: This temporal solution to proceed. This should be inside platform coz it is ompi-specific.
+   We need to put all debug here. */
 extern int pmix_server_output;
 
 opal_hash_table_t *pmix_server_peers = NULL;
@@ -152,8 +152,8 @@ int pmix_server_peer_remove(int sd)
     pmix_server_peer_t *peer = pmix_server_peer_lookup(sd);
     uint64_t ui64 = sd;
 
-    if( peer == NULL ){
-        // Nothing to do. Warn about false remove!
+    if( NULL == peer ){
+        /* Nothing to do. Warn about false remove! */
         opal_output_verbose(2, pmix_server_output,
                             "%s pmix:server: WARNING pmix_server_peer_remove(%d) for nonexisting peer\n",
                             ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), sd);
@@ -230,8 +230,8 @@ void pmix_server_peer_connected(pmix_server_peer_t* peer)
 
 void pmix_server_peer_disconnect(pmix_server_peer_t* peer)
 {
-    // If the peer is in 'pmix_server_peers' hash table
-    // it will remain there in case it will try again
+    /* If the peer is in 'pmix_server_peers' hash table
+       it will remain there in case it will try again */
     if (peer->recv_ev_active) {
         opal_event_del(&peer->recv_event);
         peer->recv_ev_active = false;

@@ -41,7 +41,7 @@
 #include "opal/mca/pmix/pmix.h"
 #include "opal/util/proc.h"
 
-// Include pmix-local files
+/* Include pmix-local files */
 #include "platform/pmix_server_peer.h"
 #include "platform/pmix_server_platform.h"
 
@@ -121,17 +121,17 @@ OBJ_CLASS_DECLARATION(pmix_server_dmx_req_t);
 
 
 
-// peer communication functions
+/* peer communication functions */
 extern void pmix_server_send_handler(int fd, short args, void *cbdata);
 extern void pmix_server_recv_handler(int fd, short args, void *cbdata);
 
-// Connection-related functions
+/* Connection-related functions */
 extern int pmix_server_start_listening(struct sockaddr_un *address, int *srv_sd);
 extern void pmix_server_connection_handler(int incoming_sd, short flags, void* cbdata);
 extern int pmix_server_send_connect_ack(pmix_server_peer_t* peer);
 extern int pmix_server_recv_connect_ack(int sd, pmix_server_hdr_t *dhdr);
 
-// Processing functions
+/* Processing functions */
 void pmix_server_process_peer(pmix_server_peer_t *peer);
 
 // TODO: make static inline in next commits

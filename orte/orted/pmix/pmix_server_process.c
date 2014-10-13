@@ -49,15 +49,8 @@
 #include "opal_stdint.h"
 #include "opal/class/opal_list.h"
 #include "opal/mca/base/mca_base_var.h"
-//#include "opal/util/opal_environ.h"
-//#include "opal/util/show_help.h"
 #include "opal/util/output.h"
-//#include "opal/opal_socket_errno.h"
-//#include "opal/util/if.h"
-//#include "opal/util/net.h"
-//#include "opal/util/argv.h"
 #include "opal/mca/dstore/dstore.h"
-
 #include "orte/mca/state/state.h"
 #include "orte/mca/errmgr/errmgr.h"
 #include "orte/mca/grpcomm/grpcomm.h"
@@ -68,7 +61,6 @@
 #include "pmix_server_basic.h"
 #include "platform/pmix_server_peer.h"
 #include "platform/pmix_server_platform.h"
-//#include "pmix_server.h"
 #include "pmix_server_internal.h"
 
 inline static int _proc_info(opal_buffer_t *reply, pmix_server_pm_handler_t *pm);
@@ -202,7 +194,7 @@ pmix_server_append_pending_dmx(pmix_server_pm_handler_t *pm, pmix_server_peer_t 
         return rc;
     }
 
-    OBJ_RETAIN(peer);  // just to be safe
+    OBJ_RETAIN(peer);  /* just to be safe */
     req->peer = peer;
     if( NULL == peer ){
         req->proxy = pm->proc;
@@ -222,7 +214,7 @@ _track_unknown_proc(pmix_server_pm_handler_t *pm, pmix_server_peer_t *peer,
     bool found = false;
     int rc, ret;
 
-    // Zero reply in case we don't need it
+    /* Zero reply in case we don't need it */
     *_reply = NULL;
 
     /* are we already tracking it? */
@@ -298,7 +290,7 @@ _reply_for_local_proc(pmix_server_pm_handler_t *pm, opal_identifier_t idreq,
     opal_buffer_t buf, *bptr = NULL;
     int ret = 0, rc = 0;
 
-    // Initialize reply with zero just in case;
+    /* Initialize reply with zero just in case */
     *_reply = NULL;
 
     opal_output_verbose(2, pmix_server_output, "%s recvd GET PROC %s IS LOCAL",
@@ -545,7 +537,7 @@ inline static int _process_kvps(pmix_server_pm_handler_t *pm, opal_buffer_t *xfe
     OBJ_CONSTRUCT(blocal, opal_buffer_t);
     OBJ_CONSTRUCT(bremote, opal_buffer_t);
     while (OPAL_SUCCESS == (rc = opal_dss.unpack(xfer, &scope, &cnt, PMIX_SCOPE_T))) {
-        found = true;  // at least one block of data is present
+        found = true;  /* at least one block of data is present */
         /* unpack the buffer */
         cnt = 1;
         if (OPAL_SUCCESS != (rc = opal_dss.unpack(xfer, &bptr, &cnt, OPAL_BUFFER))) {
@@ -604,7 +596,7 @@ inline static int _process_kvps(pmix_server_pm_handler_t *pm, opal_buffer_t *xfe
             ORTE_ERROR_LOG(rc);
             goto err_add_kv;
         }
-        bptr->base_ptr = NULL;  // protect the data region
+        bptr->base_ptr = NULL;  /* protect the data region */
         OBJ_RELEASE(bptr);
         OBJ_DESTRUCT(&kv);
         cnt = 1;
@@ -804,7 +796,7 @@ void pmix_server_process_peer(pmix_server_peer_t *peer)
     opal_dss.load(&xfer, peer->recv_msg->data, peer->recv_msg->hdr.nbytes);
     tag = peer->recv_msg->hdr.tag;
     id = peer->recv_msg->hdr.id;
-    peer->recv_msg->data = NULL;  // protect the transferred data
+    peer->recv_msg->data = NULL;  /* protect the transferred data */
     OBJ_RELEASE(peer->recv_msg);
 
     /* retrieve the cmd */
@@ -904,10 +896,10 @@ void pmix_server_process_peer(pmix_server_peer_t *peer)
         ORTE_FLAG_SET(pm->proc, ORTE_PROC_FLAG_DATA_RECVD);
 
         rc = _process_pending_dmx(pm, id, &blocal, &bremote);
-        // Free them anyway
+        /* Free them anyway */
         OBJ_DESTRUCT(&blocal);
         OBJ_DESTRUCT(&bremote);
-        // Delayed check
+        /* Delayed check */
         if( ORTE_SUCCESS != rc ){
             ORTE_ERROR_LOG(rc);
             goto cleanup;
@@ -973,7 +965,7 @@ void pmix_server_process_peer(pmix_server_peer_t *peer)
         }
 
         if( ORTE_SUCCESS != rc ){
-            // In case of error we may steel want to notify the peer.
+            /* In case of error we may steel want to notify the peer. */
             if( NULL != reply ){
                 goto reply_to_peer;
             }else{
@@ -1021,7 +1013,7 @@ void pmix_server_process_peer(pmix_server_peer_t *peer)
 
 reply_to_peer:
     PMIX_SERVER_QUEUE_SEND(peer, tag, reply);
-    reply = NULL; // Drop it so it won't be released at cleanup
+    reply = NULL; /* Drop it so it won't be released at cleanup */
 cleanup:
     if( NULL != reply ){
         OBJ_RELEASE(reply);

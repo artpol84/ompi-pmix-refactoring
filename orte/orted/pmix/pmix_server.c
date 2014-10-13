@@ -87,8 +87,8 @@ OBJ_CLASS_INSTANCE(pmix_server_local_t,
 typedef struct {
     opal_list_item_t super;
     orte_grpcomm_signature_t *sig;
-    orte_vpid_t nlocal;           // number of local procs in this collective
-    opal_list_t locals;           // list of pmix_server_local_t
+    orte_vpid_t nlocal;           /**< number of local procs in this collective */
+    opal_list_t locals;           /**< list of pmix_server_local_t */
     opal_buffer_t bucket;
 } pmix_server_trk_t;
 static void trkcon(pmix_server_trk_t *p)

@@ -69,7 +69,7 @@ typedef struct {
     opal_object_t super;
     int sd;
     orte_process_name_t name;
-    opal_event_t op_event;      // used for connecting and operations other than read/write
+    opal_event_t op_event;      /**< used for connecting and operations other than read/write */
     opal_event_t send_event;    /**< registration with event thread for send events */
     bool send_ev_active;
     opal_event_t recv_event;    /**< registration with event thread for recv events */

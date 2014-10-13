@@ -228,7 +228,7 @@ int pmix_server_recv_connect_ack(int sd, pmix_server_hdr_t *dhdr)
                         "%s pmix_server_recv_connect_ack(): connect ack from new peer on fd = %d\n",
                         ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), sd);
 
-    // ensure all is zero'dUINT32_MAX
+    /* ensure all is zero'd UINT32_MAX */
     memset(&hdr, 0, sizeof(pmix_server_hdr_t));
 
     if ( !usock_recv_blocking(sd, &hdr, sizeof(pmix_server_hdr_t))) {
@@ -427,7 +427,7 @@ void pmix_server_connection_handler(int incoming_sd, short flags, void* cbdata)
         return;
     }
 
-    // Sanity check: new fd should be in lookup table!
+    /* Sanity check: new fd should be in lookup table! */
     peer = pmix_server_peer_lookup(sd);
     if (NULL != peer) {
         opal_output_verbose(2, pmix_server_output,
@@ -435,9 +435,9 @@ void pmix_server_connection_handler(int incoming_sd, short flags, void* cbdata)
                             " Newly allocated fd = %d is already in the pmix_server_peers.\n"
                             "This shouldn't happen and might be dangerous.",
                             ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), sd);
-        // Peer might have active send/receive events but we can't call
-        // pmix_server_peer_remove since sd is a new descriptor and it will be closed!
-        // Do dirty workaround. Maybe we should error exit?
+        /* Peer might have active send/receive events but we can't call
+           pmix_server_peer_remove since sd is a new descriptor and it will be closed!
+           Do dirty workaround. Maybe we should error exit? */
         pmix_server_peer_remove(sd);
         peer = NULL;
     }
@@ -462,19 +462,19 @@ void pmix_server_connection_handler(int incoming_sd, short flags, void* cbdata)
         }
     }
 
-    // Prepare peer structure
+    /* Prepare peer structure */
     if( NULL == (peer = OBJ_NEW(pmix_server_peer_t) ) ){
         rc = ORTE_ERR_OUT_OF_RESOURCE;
         goto err_exit;
     }
     memcpy(&peer->name, &hdr.id, sizeof(opal_identifier_t));
     peer->sd = sd;
-    sd = -1; // we don't want to close this fd through sd anymore
+    sd = -1; /* we don't want to close this fd through sd anymore */
 
     // TODO: We need to create generic handler to pass it to platform-dependent code,
     // where we will provide proper wrapper
     pmix_server_peer_event_init(peer, (void*)pmix_server_recv_handler, (void*)pmix_server_send_handler);
-    // Perform response steps
+    /* Perform response steps */
     if ( ORTE_SUCCESS != (rc = pmix_server_send_connect_ack(peer)) ) {
         opal_output(0, "%s connection_handler [pmix server]: "
                     "usock_peer_send_connect_ack( %s ) failed\n",
@@ -485,7 +485,7 @@ void pmix_server_connection_handler(int incoming_sd, short flags, void* cbdata)
     }
     pmix_server_peer_connected(peer);
 
-    // Keep track about this peer
+    /* Keep track about this peer */
     if ( OPAL_SUCCESS != (rc = pmix_server_peer_add(peer->sd, peer)) ) {
         opal_output(0, "%s connection_handler [pmix server]: pmix_server_peer_add( %d, %s ) failed: %s (%d)\n",
                     ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), peer->sd, ORTE_NAME_PRINT(&(peer->name)),
@@ -501,7 +501,7 @@ void pmix_server_connection_handler(int incoming_sd, short flags, void* cbdata)
                 "opalpmix_server_peer_add(%d, %s), peer addr %p\n",
                 ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), peer->sd,
                 ORTE_NAME_PRINT(&(peer->name)), (void*)peer);
-    // successful return
+    /* successful return */
     return;
 err_exit:
     if( peer != NULL ){

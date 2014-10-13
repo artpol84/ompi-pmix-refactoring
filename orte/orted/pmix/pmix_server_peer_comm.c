@@ -74,7 +74,7 @@
 
 #include "pmix_server_internal.h"
 
-// Routines that actually work with UNIX sockets
+/* Routines that actually work with UNIX sockets */
 static int send_bytes(pmix_server_peer_t* peer)
 {
     pmix_server_send_t* msg = peer->send_msg;
@@ -87,11 +87,11 @@ static int send_bytes(pmix_server_peer_t* peer)
             case EINTR:
                 continue;
             case EAGAIN:
-                // Let event lib progress while this socket come to life
-                // Both errors will have the same effect, so join them
+                /* Let event lib progress while this socket come to life
+                   Both errors will have the same effect, so join them */
                 return ORTE_ERR_RESOURCE_BUSY;
             default:
-                // The error is serious and we cannot progress this message
+                /* The error is serious and we cannot progress this message */
                 opal_output(0, "%s [pmix server]: %s->%s write failed: %s (%d) [sd = %d]",
                             __FUNCTION__, ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), ORTE_NAME_PRINT(&(peer->name)),
                             strerror(opal_socket_errno), opal_socket_errno, peer->sd);
@@ -170,7 +170,7 @@ void pmix_server_send_handler(int sd, short flags, void *cbdata)
                     /* exit this event and let the event lib progress */
                     return;
                 } else {
-                    // report the error
+                    /* report the error */
                     opal_output_verbose(2, pmix_server_output,
                                         "%s [pmix server]: %s-%s unable to send message header [sd = %d]\n",
                                         __FUNCTION__, ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
@@ -209,7 +209,7 @@ void pmix_server_send_handler(int sd, short flags, void *cbdata)
                 /* exit this event and let the event lib progress */
                 return;
             } else {
-                // report the error
+                /* report the error */
                 opal_output_verbose(2, pmix_server_output,
                                     "%s [pmix server]: %s-%s unable to send message body [sd = %d]\n",
                                     __FUNCTION__, ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
@@ -312,7 +312,7 @@ void pmix_server_recv_handler(int sd, short flags, void *cbdata)
                                 "%s [pmix server]: %s-%s RECVD ZERO-BYTE MESSAGE for tag %d [sd = %d]\n",
                                 __FUNCTION__, ORTE_NAME_PRINT(ORTE_PROC_MY_NAME),
                                 ORTE_NAME_PRINT(&(peer->name)), peer->recv_msg->hdr.tag, peer->sd);
-            peer->recv_msg->data = NULL;  // make sure
+            peer->recv_msg->data = NULL;  /* Protect the data */
             peer->recv_msg->rdptr = NULL;
             peer->recv_msg->rdbytes = 0;
         } else {
