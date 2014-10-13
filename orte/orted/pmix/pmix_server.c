@@ -68,7 +68,7 @@
 #include "orte/util/show_help.h"
 #include "orte/runtime/orte_globals.h"
 
-#include "pmix_basic.h"
+#include "pmix_server_basic.h"
 #include "pmix_server.h"
 #include "pmix_server_internal.h"
 

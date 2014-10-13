@@ -24,10 +24,13 @@
  *
  */
 
-#ifndef PMIX_BASIC_H
-#define PMIX_BASIC_H
+#ifndef _PMIX_SERVER_BASIC_H_
+#define _PMIX_SERVER_BASIC_H_
 
+#include "orte_config.h"
 #include "opal/class/opal_list.h"
+
+BEGIN_C_DECLS
 
 // ------------------------------------------------8<------------------------------------------------------//
 // TODO: Schedule transaction to opal/mca/pmix/basic ?!
@@ -139,4 +142,6 @@ typedef struct {
 #define PMIX_ADD_KP(_kp, _reply, _key, _field, _val, __eext )   \
     PMIX_ADD_KP_ ## _field(_kp, _reply, _key, _field, _val, __eext)
 
-#endif // PMIX_BASIC_H
+END_C_DECLS
+
+#endif /* _PMIX_SERVER_BASIC_H_ */

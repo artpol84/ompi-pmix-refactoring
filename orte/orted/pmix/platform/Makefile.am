@@ -9,9 +9,9 @@
 #
 
 headers += \
-          orted/pmix/platform/pmix_peer.h \
-          orted/pmix/platform/pmix_platform.h
+          orted/pmix/platform/pmix_server_peer.h \
+          orted/pmix/platform/pmix_server_platform.h
 
 lib@ORTE_LIB@_la_SOURCES += \
-          orted/pmix/platform/pmix_peer.c \
-          orted/pmix/platform/pmix_job.c
+          orted/pmix/platform/pmix_server_peer.c \
+          orted/pmix/platform/pmix_server_job.c

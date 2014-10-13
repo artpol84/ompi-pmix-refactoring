@@ -51,8 +51,8 @@
 #include "orte/util/name_fns.h"
 #include "orte/runtime/orte_globals.h"
 
-#include "orte/orted/pmix/pmix_basic.h"
-#include "orte/orted/pmix/platform/pmix_peer.h"
+#include "orte/orted/pmix/pmix_server_basic.h"
+#include "pmix_server_peer.h"
 
 // TODO: This temporal solution to proceed. This should be inside platform coz it is ompi-specific.
 // We need to put all debug here.

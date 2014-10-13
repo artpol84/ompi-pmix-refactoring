@@ -24,37 +24,19 @@
  *
  */
 
-#ifndef _PMIX_PEER_H_
-#define _PMIX_PEER_H_
+#ifndef _PMIX_SERVER_PEER_H_
+#define _PMIX_SERVER_PEER_H_
 
 #include "orte_config.h"
 #include "orte/types.h"
-#include "opal/types.h"
-
-#ifdef HAVE_UNISTD_H
-#include <unistd.h>
-#endif
-#ifdef HAVE_SYS_TYPES_H
-#include <sys/types.h>
-#endif
-#include <fcntl.h>
-#ifdef HAVE_NETINET_IN_H
-#include <netinet/in.h>
-#endif
-#ifdef HAVE_ARPA_INET_H
-#include <arpa/inet.h>
-#endif
-#ifdef HAVE_NETDB_H
-#include <netdb.h>
-#endif
-#include <ctype.h>
-
 #include "opal/types.h"
 #include "opal/mca/base/base.h"
 #include "opal/mca/event/event.h"
 #include "opal/class/opal_hash_table.h"
 #include "opal/mca/pmix/pmix.h"
-#include "orte/orted/pmix/pmix_basic.h"
+#include "orte/orted/pmix/pmix_server_basic.h"
+
+BEGIN_C_DECLS
 
 /* usock structure for sending a message */
 typedef struct {
@@ -112,4 +94,6 @@ pmix_server_peer_t* pmix_server_peer_lookup(int sd);
 void pmix_server_peer_disconnect(pmix_server_peer_t *peer);
 void pmix_server_peer_dump(pmix_server_peer_t* peer, const char* msg);
 
-#endif
+END_C_DECLS
+
+#endif /* _PMIX_SERVER_PEER_H_ */

@@ -42,8 +42,8 @@
 #include "opal/util/proc.h"
 
 // Include pmix-local files
-#include "platform/pmix_peer.h"
-#include "platform/pmix_platform.h"
+#include "platform/pmix_server_peer.h"
+#include "platform/pmix_server_platform.h"
 
 
 BEGIN_C_DECLS

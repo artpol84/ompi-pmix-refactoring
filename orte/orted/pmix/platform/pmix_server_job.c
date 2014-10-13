@@ -65,8 +65,8 @@
 #include "orte/util/name_fns.h"
 #include "orte/runtime/orte_globals.h"
 
-#include "orte/orted/pmix/pmix_basic.h"
-#include "pmix_platform.h"
+#include "orte/orted/pmix/pmix_server_basic.h"
+#include "pmix_server_platform.h"
 
 static void pm_hndl_con(pmix_server_pm_handler_t *p)
 {

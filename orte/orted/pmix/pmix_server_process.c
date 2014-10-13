@@ -65,9 +65,9 @@
 #include "orte/util/name_fns.h"
 #include "orte/runtime/orte_globals.h"
 
-#include "pmix_basic.h"
-#include "platform/pmix_peer.h"
-#include "platform/pmix_platform.h"
+#include "pmix_server_basic.h"
+#include "platform/pmix_server_peer.h"
+#include "platform/pmix_server_platform.h"
 //#include "pmix_server.h"
 #include "pmix_server_internal.h"
 
