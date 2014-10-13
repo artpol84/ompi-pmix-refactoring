@@ -79,6 +79,11 @@ pmix_server_pm_handler_t *pmix_server_handler_pm(orte_process_name_t name)
 {
     pmix_server_pm_handler_t *pm = OBJ_NEW(pmix_server_pm_handler_t);
 
+    if( NULL == pm ){
+        return NULL;
+    }
+
+    pm->name = name;
     if (NULL == (pm->jdata = orte_get_job_data_object(name.jobid))) {
         OBJ_RELEASE(pm);
         return NULL;
