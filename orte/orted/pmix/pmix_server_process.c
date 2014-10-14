@@ -69,7 +69,7 @@ int pmix_server_append_pending_dmx(pmix_server_pm_handler_t *pm, pmix_server_pee
                                opal_identifier_t idreq, uint32_t tag);
 inline static int
 _track_unknown_proc(pmix_server_pm_handler_t *pm, pmix_server_peer_t *peer,
-                               opal_identifier_t idreq, uint32_t tag, opal_buffer_t **_reply);
+                    uint32_t tag, opal_buffer_t **_reply);
 inline static int
 _reply_for_local_proc(pmix_server_pm_handler_t *pm, opal_identifier_t idreq,
                                  opal_buffer_t **_reply);
@@ -194,11 +194,14 @@ pmix_server_append_pending_dmx(pmix_server_pm_handler_t *pm, pmix_server_peer_t 
         return rc;
     }
 
-    OBJ_RETAIN(peer);  /* just to be safe */
-    req->peer = peer;
-    if( NULL == peer ){
+    if( NULL != peer ){
+        OBJ_RETAIN(peer);  /* just to be safe */
+        req->peer = peer;
+    } else {
+        OBJ_RETAIN(pm->proc);
         req->proxy = pm->proc;
     }
+
     req->target = idreq;
     req->tag = tag;
     opal_list_append(&pmix_server_pending_dmx_reqs, &req->super);
@@ -207,19 +210,20 @@ pmix_server_append_pending_dmx(pmix_server_pm_handler_t *pm, pmix_server_peer_t 
 
 inline static int
 _track_unknown_proc(pmix_server_pm_handler_t *pm, pmix_server_peer_t *peer,
-                    opal_identifier_t idreq, uint32_t tag, opal_buffer_t **_reply)
+                    uint32_t tag, opal_buffer_t **_reply)
 {
     pmix_server_dmx_req_t *req;
     opal_buffer_t *reply = NULL;
     bool found = false;
     int rc, ret;
+    opal_identifier_t id = *((opal_identifier_t *)&pm->name);
 
     /* Zero reply in case we don't need it */
     *_reply = NULL;
 
     /* are we already tracking it? */
     OPAL_LIST_FOREACH(req, &pmix_server_pending_dmx_reqs, pmix_server_dmx_req_t) {
-        if (idreq == req->target) {
+        if (id == req->target) {
             /* yes, so we don't need to send another request, but
              * we do need to track that this peer also wants
              * a copy */
@@ -228,7 +232,7 @@ _track_unknown_proc(pmix_server_pm_handler_t *pm, pmix_server_peer_t *peer,
         }
     }
 
-    if( ORTE_SUCCESS != pmix_server_append_pending_dmx(pm, peer, idreq, tag) ){
+    if( ORTE_SUCCESS != pmix_server_append_pending_dmx(pm, peer, id, tag) ){
         goto err_cleanup;
     }
 
@@ -256,7 +260,7 @@ _track_unknown_proc(pmix_server_pm_handler_t *pm, pmix_server_peer_t *peer,
             /* If this is the remote daemon */
             reply = OBJ_NEW(opal_buffer_t);
             /* pack the proc we want info about */
-            if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &idreq, 1, OPAL_UINT64))) {
+            if (OPAL_SUCCESS != (rc = opal_dss.pack(reply, &id, 1, OPAL_UINT64))) {
                 ORTE_ERROR_LOG(rc);
                 goto err_cleanup;
             }
@@ -785,8 +789,8 @@ void pmix_server_process_peer(pmix_server_peer_t *peer)
     opal_buffer_t xfer, *bptr, buf, save, blocal, bremote;
     opal_value_t kv, *kp = &kv;
     opal_identifier_t id, idreq;
-    orte_process_name_t name;
-    pmix_server_pm_handler_t *pm;
+    orte_process_name_t name, name2;
+    pmix_server_pm_handler_t *pm = NULL, *pm2 = NULL;
     uint32_t tag;
     bool found;
     orte_grpcomm_signature_t *sig = NULL;
@@ -927,6 +931,7 @@ void pmix_server_process_peer(pmix_server_peer_t *peer)
     err_free_save:
         OBJ_DESTRUCT(&save);
         goto cleanup;
+
     case PMIX_GET_CMD:
         /* unpack the id of the proc whose data is being requested */
         cnt = 1;
@@ -938,10 +943,19 @@ void pmix_server_process_peer(pmix_server_peer_t *peer)
                             ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), ORTE_NAME_PRINT(&name),
                             ORTE_NAME_PRINT((orte_process_name_t*)&idreq) );
 
+        /* get the job and proc objects for the sender */
+        memcpy((char*)&name2, (char*)&idreq, sizeof(orte_process_name_t));
+        if( NULL == (pm2 = pmix_server_handler_pm(name2)) ){
+            // FIXME: do we need to respond with reject to the sender?
+            rc = ORTE_ERR_NOT_FOUND;
+            ORTE_ERROR_LOG(rc);
+            goto cleanup;
+        }
+
         /* if we have not yet received data for this proc, then we just
          * need to track the request */
-        if (!ORTE_FLAG_TEST(pm->proc, ORTE_PROC_FLAG_DATA_RECVD)) {
-            if( (rc = _track_unknown_proc(pm, peer, idreq, tag, &reply)) ){
+        if (!ORTE_FLAG_TEST(pm2->proc, ORTE_PROC_FLAG_DATA_RECVD)) {
+            if( (rc = _track_unknown_proc(pm2, peer, tag, &reply)) ){
                 ORTE_ERROR_LOG(rc);
                 goto cleanup;
             }
@@ -958,7 +972,7 @@ void pmix_server_process_peer(pmix_server_peer_t *peer)
          * the number of procs is below the cutoff as we will immediately
          * attempt to retrieve the hostname for each proc, but they may
          * not have posted their data by that time */
-        if (ORTE_FLAG_TEST(pm->proc, ORTE_PROC_FLAG_LOCAL)) {
+        if (ORTE_FLAG_TEST(pm2->proc, ORTE_PROC_FLAG_LOCAL)) {
             rc = _reply_for_local_proc(pm, idreq, &reply);
         }else{
             rc = _reply_for_remote_proc(pm, idreq, &reply);
@@ -1023,6 +1037,9 @@ cleanup:
     }
     if( NULL != pm ){
         OBJ_RELEASE(pm);
+    }
+    if( NULL != pm2 ){
+        OBJ_RELEASE(pm2);
     }
     OBJ_DESTRUCT(&xfer);
 
