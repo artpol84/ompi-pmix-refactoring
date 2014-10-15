@@ -787,7 +787,6 @@ void pmix_server_process_peer(pmix_server_peer_t *peer)
     pmix_cmd_t cmd;
     opal_buffer_t *reply = NULL;
     opal_buffer_t xfer, *bptr, buf, save, blocal, bremote;
-    opal_value_t kv, *kp = &kv;
     opal_identifier_t id, idreq;
     orte_process_name_t name, name2;
     pmix_server_pm_handler_t *pm = NULL, *pm2 = NULL;

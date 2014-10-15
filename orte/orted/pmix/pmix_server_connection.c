@@ -476,7 +476,7 @@ void pmix_server_connection_handler(int incoming_sd, short flags, void* cbdata)
 
     // TODO: We need to create generic handler to pass it to platform-dependent code,
     // where we will provide proper wrapper
-    pmix_server_peer_event_init(peer, (void*)pmix_server_recv_handler, (void*)pmix_server_send_handler);
+    pmix_server_peer_event_init(peer);
     /* Perform response steps */
     if ( ORTE_SUCCESS != (rc = pmix_server_send_connect_ack(peer)) ) {
         opal_output(0, "%s pmix:server %s: "

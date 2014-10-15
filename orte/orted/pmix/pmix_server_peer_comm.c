@@ -152,7 +152,7 @@ static int read_bytes(pmix_server_peer_t* peer)
  * A file descriptor is available/ready for send. Check the state
  * of the socket and take the appropriate action.
  */
-void pmix_server_send_handler(int sd, short flags, void *cbdata)
+void pmix_server_send_handler(void *cbdata)
 {
     pmix_server_peer_t* peer = (pmix_server_peer_t*)cbdata;
     pmix_server_send_t* msg = peer->send_msg;
@@ -254,7 +254,7 @@ next:
 
 }
 
-void pmix_server_recv_handler(int sd, short flags, void *cbdata)
+void pmix_server_recv_handler(void *cbdata)
 {
     pmix_server_peer_t* peer = (pmix_server_peer_t*)cbdata;
     int rc;

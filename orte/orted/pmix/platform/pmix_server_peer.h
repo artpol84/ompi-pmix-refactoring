@@ -82,13 +82,13 @@ typedef struct {
 } pmix_server_peer_t;
 OBJ_CLASS_DECLARATION(pmix_server_peer_t);
 
-int pmix_server_peer_init(void);
+int pmix_server_peer_init(pmix_callback_t rcb, pmix_callback_t scb);
 void pmix_server_peers_destruct(void);
 int pmix_server_peers_first(uint64_t *ui64, pmix_server_peer_t **pr, void**next);
 int pmix_server_peers_next(uint64_t *ui64, pmix_server_peer_t **pr, void**next);
 int pmix_server_peer_add(int sd, pmix_server_peer_t *peer);
 int pmix_server_peer_remove(int sd);
-void pmix_server_peer_event_init(pmix_server_peer_t* peer, void *recv_cb, void *send_cb);
+void pmix_server_peer_event_init(pmix_server_peer_t* peer);
 void pmix_server_peer_connected(pmix_server_peer_t* peer);
 pmix_server_peer_t* pmix_server_peer_lookup(int sd);
 void pmix_server_peer_disconnect(pmix_server_peer_t *peer);

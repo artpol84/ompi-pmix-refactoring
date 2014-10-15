@@ -187,7 +187,7 @@ int pmix_server_init(void)
     initialized = true;
 
     /* setup the servers's state variables */
-    if( OPAL_SUCCESS != (rc = pmix_server_peer_init()) ){
+    if( OPAL_SUCCESS != (rc = pmix_server_peer_init(pmix_server_recv_handler, pmix_server_send_handler)) ){
         opal_output(0, "%s %s: Cannot initialize peers table.\n",
                     ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), __FUNCTION__);
         ORTE_ERROR_LOG(rc);

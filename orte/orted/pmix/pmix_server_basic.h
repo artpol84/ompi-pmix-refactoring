@@ -81,6 +81,8 @@ typedef struct {
     char *peers_list;
 } pmix_job_info_t;
 
+typedef void (*pmix_callback_t)(void *cbdata);
+
 #define PMIX_KV_FIELD_uint32(x) (x->data.uint32)
 #define PMIX_KV_FIELD_uint16(x) (x->data.uint16)
 #define PMIX_KV_FIELD_string(x) (x->data.string)

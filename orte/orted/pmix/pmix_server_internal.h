@@ -122,8 +122,8 @@ OBJ_CLASS_DECLARATION(pmix_server_dmx_req_t);
 
 
 /* peer communication functions */
-extern void pmix_server_send_handler(int fd, short args, void *cbdata);
-extern void pmix_server_recv_handler(int fd, short args, void *cbdata);
+extern void pmix_server_send_handler(void *cbdata);
+extern void pmix_server_recv_handler(void *cbdata);
 
 /* Connection-related functions */
 extern int pmix_server_start_listening(struct sockaddr_un *address, int *srv_sd);

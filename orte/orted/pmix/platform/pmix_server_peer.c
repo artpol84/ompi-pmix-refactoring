@@ -58,7 +58,11 @@
    We need to put all debug here. */
 extern int pmix_server_output;
 
-opal_hash_table_t *pmix_server_peers = NULL;
+static pmix_callback_t send_cb = NULL, recv_cb = NULL;
+static opal_hash_table_t *peers_tbl = NULL;
+
+static void pm_recv_handler(int sd, short flags, void *cbdata);
+static void pm_send_handler(int sd, short flags, void *cbdata);
 
 static void rcon(pmix_server_recv_t *p)
 {
@@ -109,20 +113,22 @@ OBJ_CLASS_INSTANCE(pmix_server_peer_t,
                    opal_object_t,
                    pcon, pdes);
 
-int pmix_server_peer_init(void)
+int pmix_server_peer_init(pmix_callback_t rcb, pmix_callback_t scb)
 {
-    pmix_server_peers = OBJ_NEW(opal_hash_table_t);
-    return opal_hash_table_init(pmix_server_peers, 32);
+    recv_cb = rcb;
+    send_cb = scb;
+    peers_tbl = OBJ_NEW(opal_hash_table_t);
+    return opal_hash_table_init(peers_tbl, 32);
 }
 
 void pmix_server_peers_destruct(void)
 {
-    if( pmix_server_peers ){
+    if( peers_tbl ){
         opal_output_verbose(2, pmix_server_output,
                             "%s: %s [pmix server]: called\n",
                             ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), __FUNCTION__);
-        OBJ_RELEASE(pmix_server_peers);
-        pmix_server_peers = NULL;
+        OBJ_RELEASE(peers_tbl);
+        peers_tbl = NULL;
     }else{
         opal_output_verbose(2, pmix_server_output,
                             "%s: %s [pmix server]: WARNING! Double table destruction!\n",
@@ -133,17 +139,17 @@ void pmix_server_peers_destruct(void)
 int pmix_server_peer_add(int sd, pmix_server_peer_t *peer)
 {
     uint64_t ui64 = sd;
-    return  opal_hash_table_set_value_uint64(pmix_server_peers, ui64, peer);
+    return  opal_hash_table_set_value_uint64(peers_tbl, ui64, peer);
 }
 
 int pmix_server_peers_first(uint64_t *ui64, pmix_server_peer_t **pr, void**next)
 {
-    return opal_hash_table_get_first_key_uint64(pmix_server_peers, ui64, (void**)pr, next);
+    return opal_hash_table_get_first_key_uint64(peers_tbl, ui64, (void**)pr, next);
 }
 
 int pmix_server_peers_next(uint64_t *ui64, pmix_server_peer_t **pr, void**next)
 {
-    return opal_hash_table_get_next_key_uint64(pmix_server_peers, ui64, (void**)&pr, *next, next);
+    return opal_hash_table_get_next_key_uint64(peers_tbl, ui64, (void**)&pr, *next, next);
 }
 
 int pmix_server_peer_remove(int sd)
@@ -159,21 +165,31 @@ int pmix_server_peer_remove(int sd)
                             ORTE_NAME_PRINT(ORTE_PROC_MY_NAME), sd);
         return OPAL_SUCCESS;
     }
-    if( OPAL_SUCCESS != ( rc = opal_hash_table_remove_value_uint64(pmix_server_peers, ui64) ) ){
+    if( OPAL_SUCCESS != ( rc = opal_hash_table_remove_value_uint64(peers_tbl, ui64) ) ){
         return rc;
     }
     OBJ_RELEASE(peer);
     return OPAL_SUCCESS;
 }
 
-void pmix_server_peer_event_init(pmix_server_peer_t* peer, void *recv_cb, void *send_cb)
+static void pm_recv_handler(int sd, short flags, void *cbdata)
+{
+    recv_cb(cbdata);
+}
+
+static void pm_send_handler(int sd, short flags, void *cbdata)
+{
+    send_cb(cbdata);
+}
+
+void pmix_server_peer_event_init(pmix_server_peer_t* peer)
 {
     if (peer->sd >= 0) {
         opal_event_set(orte_event_base,
                        &peer->recv_event,
                        peer->sd,
                        OPAL_EV_READ|OPAL_EV_PERSIST,
-                       (event_callback_fn)recv_cb,
+                       (event_callback_fn)pm_recv_handler,
                        peer);
         opal_event_set_priority(&peer->recv_event, ORTE_MSG_PRI);
         if (peer->recv_ev_active) {
@@ -185,7 +201,7 @@ void pmix_server_peer_event_init(pmix_server_peer_t* peer, void *recv_cb, void *
                        &peer->send_event,
                        peer->sd,
                        OPAL_EV_WRITE|OPAL_EV_PERSIST,
-                       (event_callback_fn)send_cb,
+                       (event_callback_fn)pm_send_handler,
                        peer);
         opal_event_set_priority(&peer->send_event, ORTE_MSG_PRI);
         if (peer->send_ev_active) {
@@ -263,7 +279,7 @@ pmix_server_peer_t* pmix_server_peer_lookup(int sd)
     uint64_t ui64;
 
     ui64 = sd;
-    if (OPAL_SUCCESS != opal_hash_table_get_value_uint64(pmix_server_peers, ui64, (void**)&peer)) {
+    if (OPAL_SUCCESS != opal_hash_table_get_value_uint64(peers_tbl, ui64, (void**)&peer)) {
         return NULL;
     }
     return peer;
