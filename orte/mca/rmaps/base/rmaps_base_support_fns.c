@@ -581,9 +581,11 @@ orte_proc_t* orte_rmaps_base_setup_proc(orte_job_t *jdata,
     OBJ_RETAIN(node);  /* maintain accounting on object */    
     proc->node = node;
     node->num_procs++;
+
     if (node->slots_inuse < node->slots) {
         node->slots_inuse += orte_rmaps_base.cpus_per_rank;
     }
+
     if (0 > (rc = opal_pointer_array_add(node->procs, (void*)proc))) {
         ORTE_ERROR_LOG(rc);
         OBJ_RELEASE(proc);

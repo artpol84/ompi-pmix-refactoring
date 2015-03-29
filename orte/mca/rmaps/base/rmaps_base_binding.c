@@ -757,6 +757,12 @@ int orte_rmaps_base_compute_bindings(orte_job_t *jdata)
     case ORTE_MAPPING_BYNUMA:
         hwm = HWLOC_OBJ_NODE;
         break;
+#if (CUDA | OPEN_ACC)
+    case ORTE_MAPPING_BYGPU:
+        // bind to the NUMA that hosts this GPU
+        hwm = HWLOC_OBJ_NODE;
+        break;
+#endif
     case ORTE_MAPPING_BYSOCKET:
         hwm = HWLOC_OBJ_SOCKET;
         break;
@@ -796,7 +802,11 @@ int orte_rmaps_base_compute_bindings(orte_job_t *jdata)
      * procs to the resources below.
      */
 
-    if (ORTE_MAPPING_BYDIST == map) {
+    if (ORTE_MAPPING_BYDIST == map
+#if (CUDA | OPEN_ACC)
+            || ORTE_MAPPING_BYGPU == map
+#endif
+            ) {
         int rc = ORTE_SUCCESS;
         if (OPAL_BIND_TO_NUMA == bind) {
             opal_output_verbose(5, orte_rmaps_base_framework.framework_output,

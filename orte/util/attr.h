@@ -165,6 +165,7 @@ typedef uint16_t orte_proc_flags_t;
 #define ORTE_PROC_NODENAME        (ORTE_PROC_START_KEY + 12)           // string - node where proc is located, used only by tools
 #define ORTE_PROC_CGROUP          (ORTE_PROC_START_KEY + 13)           // string - name of cgroup this proc shall be assigned to
 #define ORTE_PROC_NBEATS          (ORTE_PROC_START_KEY + 14)           // int32 - number of heartbeats in current window
+#define ORTE_PROC_GPU_ID          (ORTE_PROC_START_KEY + 15)           // ???? dunno yet
 
 #define ORTE_PROC_MAX_KEY   400
 

@@ -231,6 +231,30 @@ static void set(orte_job_t *jobdat,
             }
         }
     }
+
+#if (CUDA || OPEN_ACC)
+    {
+        /*TODO: Rolf was concerned about lazy linking:
+         * I am struggling a little with the automatic calling of cudaSetDevice or acc_set_device.
+         * This may get tricky in the implementation.  Currently, we do a lazy load of libcuda.so.1
+         * within the Open MPI library.  This is initiated when one of the supported BTLs gets loaded,
+         * like smcuda, tcp, or openib.  I am trying to figure out if we will be able to make the call
+         * to cudaSetDevice within the code outlined below.
+         * Also, if we add in a call to acc_set_device, then we make the Open MPI library dependent on PGI?
+         *
+         * Artem: I think that it is possible to check ORTE_PROC_GPU in those components and move that code there.
+         */
+        char/int gpuno;
+        if (!orte_get_attribute(&child->attributes, ORTE_PROC_GPU, (void**)&gpuno, OPAL_?? some universal id for gpu) ){
+#if CUDA
+            cudaSetDevice( cuda_convert( gpu ) );
+#elif OPEN_ACC
+            acc_set_device( oacc_convert( gpu) );
+#endif
+        }
+    }
+#endif
+
     if (NULL != cpu_bitmap) {
         free(cpu_bitmap);
     }
