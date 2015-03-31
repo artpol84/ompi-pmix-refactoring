@@ -234,18 +234,21 @@ static void set(orte_job_t *jobdat,
 
 #if (CUDA || OPEN_ACC)
     {
-        /*TODO: Rolf was concerned about lazy linking:
-         * I am struggling a little with the automatic calling of cudaSetDevice or acc_set_device.
-         * This may get tricky in the implementation.  Currently, we do a lazy load of libcuda.so.1
-         * within the Open MPI library.  This is initiated when one of the supported BTLs gets loaded,
-         * like smcuda, tcp, or openib.  I am trying to figure out if we will be able to make the call
-         * to cudaSetDevice within the code outlined below.
-         * Also, if we add in a call to acc_set_device, then we make the Open MPI library dependent on PGI?
+        /* At this point all processes are bound to CPUs that we chose based on GPU
+         * location. Since this code is executed BEFORE exec we probably can't call
+         * GPU-binidng here since it is library/not-OS call (correct me if I am wrong).
          *
-         * Artem: I think that it is possible to check ORTE_PROC_GPU in those components and move that code there.
+         * The current solution is to export MCA parameter:
+         * OMPI_MCA_rmaps_gpu_no=NUMA#:GPU-in-the-NUMA#
          */
         char/int gpuno;
-        if (!orte_get_attribute(&child->attributes, ORTE_PROC_GPU, (void**)&gpuno, OPAL_?? some universal id for gpu) ){
+        if (!orte_get_attribute(&child->attributes, ORTE_PROC_GPU, (void**)&gpu_idx, OPAL_INT) ){
+            int numa_idx = get_numa_index(obj);
+            char *mca_val, *mca_name;
+            asprintf(&mca_val, "%d:%d", numa_idx, gpu_idx);
+            (void) mca_base_var_env_name ("rmaps_gpu_no", &mca_name);
+            opal_setenv(mca_name, mca_val, 1,environ_copy);
+
 #if CUDA
             cudaSetDevice( cuda_convert( gpu ) );
 #elif OPEN_ACC

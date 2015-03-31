@@ -467,7 +467,25 @@ int mca_common_cuda_stage_one_init(void)
 #if OPAL_CUDA_GET_ATTRIBUTES
     OPAL_CUDA_DLSYM(libcuda_handle, cuPointerGetAttributes);
 #endif /* OPAL_CUDA_GET_ATTRIBUTES */
+    OPAL_CUDA_DLSYM(libcuda_handle, cudaDeviceGetByPCIBusId);
+    OPAL_CUDA_DLSYM(libcuda_handle, cudaSetDevice);
+
+
     return 0;
+}
+
+void mca_common_cuda_bind()
+{
+    char *mca_name, *mca_val, *pcibusid;
+    int dev;
+    (void) mca_base_var_env_name ("rmaps_gpu_no", &mca_name);
+    mca_val = getenv(mca_name);
+    /* parse mcaval onto numaid and gpuid */
+    pcibusid = opal_hwloc_bas_gpu_pci_ids(numaid,gpuid);
+    cudaDeviceGetByPCIBusId(&dev, pciBusId);
+    /* Will be done for the current thread only :( need the way
+     * to propagate it on pthread_create? */
+    cudaSetDevice(dev);
 }
 
 /**

@@ -105,6 +105,21 @@ hwloc_obj_t opal_hwloc_base_get_pu(hwloc_topology_t topo,
     return obj;
 }
 
+char opal_hwloc_bas_gpu_pci_ids(int numa, int devno)
+{
+    int *ret = NULL;
+    hwloc_obj_t gpu;
+    /* Similar to http://www.open-mpi.org/faq/?category=runcuda#mpi-cuda-support
+     * 1. Get NUMA by index
+     * 2. Find BRIDGE
+     * 3. Get gpudevice's hwloc_obj_t structure into gpu
+     */
+    asprintf(&ret, "%.2x:%.2x:%.2x.%x", gpu->attr->pcidev.domain,
+            gpu->attr->pcidev.bus,
+            gpu->attr->pcidev.dev, gpu->attr->pcidev.func);
+    return ret;
+}
+
 /* determine the node-level available cpuset based on
  * online vs allowed vs user-specified cpus
  */

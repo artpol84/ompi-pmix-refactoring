@@ -847,6 +847,7 @@ mca_btl_smcuda_component_init(int *num_btls,
 
 #if OPAL_CUDA_SUPPORT
     mca_common_cuda_stage_one_init();
+    mca_common_cuda_bind();
 #endif /* OPAL_CUDA_SUPPORT */
 
     /* if no session directory was created, then we cannot be used */
