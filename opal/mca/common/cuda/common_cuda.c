@@ -108,6 +108,8 @@ struct cudaFunctionTable {
 #if OPAL_CUDA_GET_ATTRIBUTES
     int (*cuPointerGetAttributes)(unsigned int, CUpointer_attribute *, void **, CUdeviceptr);
 #endif /* OPAL_CUDA_GET_ATTRIBUTES */
+    int (*cudaDeviceGetByPCIBusId)(int* ,char*);
+    int (*cudaSetDevice)(int);
 } cudaFunctionTable;
 typedef struct cudaFunctionTable cudaFunctionTable_t;
 cudaFunctionTable_t cuFunc;
@@ -476,13 +478,16 @@ int mca_common_cuda_stage_one_init(void)
 
 void mca_common_cuda_bind()
 {
-    char *mca_name, *mca_val, *pcibusid;
-    int dev;
+    char *mca_name, *mca_val, *PciBusId;
+    int dev, numaid, gpuid;
+    hwloc_obj_t bind_gpu;
     (void) mca_base_var_env_name ("rmaps_gpu_no", &mca_name);
     mca_val = getenv(mca_name);
     /* parse mcaval onto numaid and gpuid */
-    pcibusid = opal_hwloc_bas_gpu_pci_ids(numaid,gpuid);
-    cudaDeviceGetByPCIBusId(&dev, pciBusId);
+    sscanf(mca_val , "%d:%d", &numaid, &gpuid);
+    bind_gpu = opal_hwloc_bus_gpu_pci_ids(numaid,gpuid);
+    PciBusId = bind_gpu->attr->pcidev.bus;
+    cudaDeviceGetByPCIBusId(&dev, PciBusId);
     /* Will be done for the current thread only :( need the way
      * to propagate it on pthread_create? */
     cudaSetDevice(dev);

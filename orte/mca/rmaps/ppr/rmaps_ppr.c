@@ -22,6 +22,8 @@
 #include <string.h>
 #endif  /* HAVE_STRING_H */
 
+/* my comment */
+
 #include "opal/mca/hwloc/base/base.h"
 #include "opal/util/argv.h"
 
