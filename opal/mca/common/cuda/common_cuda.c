@@ -29,6 +29,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <cuda.h>
+#include <cuda_runtime_api.h>
 
 #include "opal/align.h"
 #include "opal/datatype/opal_convertor.h"
@@ -140,6 +141,9 @@ static int mca_common_cuda_cu_memcpy(void*, const void*, size_t);
 
 /* Function that gets plugged into opal layer */
 static int mca_common_cuda_stage_two_init(opal_common_cuda_function_table_t *);
+
+/* Functions for GPU binding*/
+hwloc_obj_t opal_hwloc_base_gpu_pci_ids(int, int);
 
 /* Structure to hold memory registrations that are delayed until first
  * call to send or receive a GPU pointer */
@@ -485,11 +489,10 @@ void mca_common_cuda_bind()
     mca_val = getenv(mca_name);
     /* parse mcaval onto numaid and gpuid */
     sscanf(mca_val , "%d:%d", &numaid, &gpuid);
-    bind_gpu = opal_hwloc_bus_gpu_pci_ids(numaid,gpuid);
+    bind_gpu = opal_hwloc_base_gpu_pci_ids(numaid,gpuid);
     PciBusId = bind_gpu->attr->pcidev.bus;
     cudaDeviceGetByPCIBusId(&dev, PciBusId);
-    /* Will be done for the current thread only :( need the way
-     * to propagate it on pthread_create? */
+
     cudaSetDevice(dev);
 }
 
