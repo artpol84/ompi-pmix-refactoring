@@ -108,8 +108,9 @@ hwloc_obj_t opal_hwloc_base_get_pu(hwloc_topology_t topo,
 static int gpuIndex = 0;
 static hwloc_obj_t gpus[16] = {0};
 
-void test_find_gpu(hwloc_obj_t obj){
+int test_find_gpu(hwloc_obj_t obj){
     hwloc_obj_t child;
+    //int result = 0;
 
     if(obj->attr->pcidev.vendor_id == 0x10de)
         gpus[gpuIndex++] = obj;
@@ -118,10 +119,20 @@ void test_find_gpu(hwloc_obj_t obj){
         test_find_gpu(child);
         child = child->next_sibling;
     }
+
+    int ret_value = gpuIndex;
+    //gpuIndex = 0;
+    return ret_value;
+}
+
+hwloc_obj_t opal_hwloc_get_gpu_by_idx(int idx){
+
+    return gpus[idx];
 }
 
 
-hwloc_obj_t opal_hwloc_bus_gpu_pci_ids(int numa, int devno)
+
+hwloc_obj_t opal_hwloc_base_gpu_pci_ids(int numa, int devno)
 {
     int *ret = NULL;
     hwloc_obj_t machine;
@@ -130,15 +141,12 @@ hwloc_obj_t opal_hwloc_bus_gpu_pci_ids(int numa, int devno)
      * 2. Find BRIDGE
      * 3. Get gpudevice's hwloc_obj_t structure into gpu
      */
-    machine = hwloc_get_root_obj(opal_hwloc_topology);
+    /*machine = hwloc_get_root_obj(opal_hwloc_topology);
     if(machine->arity < numa){
-        test_find_gpu(machine->children[numa]);
+        //test_find_gpu(machine->children[numa]);
     }
     else return NULL;
-    /*asprintf(&ret, "%.2x:%.2x:%.2x.%x", gpus[devno]->attr->pcidev.domain,
-            gpus[devno]->attr->pcidev.bus,
-            gpus[devno]->attr->pcidev.dev, gpus[devno]->attr->pcidev.func);
-    return ret;*/
+    */
     if (gpuIndex>devno)
         return gpus[devno];
     else return NULL;
