@@ -741,6 +741,8 @@ int orte_rmaps_base_compute_bindings(orte_job_t *jdata)
     case OPAL_BIND_TO_HWTHREAD:
         hwb = HWLOC_OBJ_PU;
         break;
+    case OPAL_BIND_TO_GPU:
+        hwb = HWLOC_OBJ_NODE;
     default:
         ORTE_ERROR_LOG(ORTE_ERR_BAD_PARAM);
         return ORTE_ERR_BAD_PARAM;
@@ -802,11 +804,10 @@ int orte_rmaps_base_compute_bindings(orte_job_t *jdata)
      * procs to the resources below.
      */
 
-    if (ORTE_MAPPING_BYDIST == map
-#if (CUDA | OPEN_ACC)
-            || ORTE_MAPPING_BYGPU == map
-#endif
-            ) {
+    if (ORTE_MAPPING_BYDIST == map || ORTE_MAPPING_BYGPU == map)
+//#if (HAVE_CUDA )
+//#endif
+        {
         int rc = ORTE_SUCCESS;
         if (OPAL_BIND_TO_NUMA == bind) {
             opal_output_verbose(5, orte_rmaps_base_framework.framework_output,

@@ -22,7 +22,6 @@
 #include <string.h>
 #endif  /* HAVE_STRING_H */
 
-
 #include "opal/mca/hwloc/base/base.h"
 #include "opal/util/argv.h"
 
@@ -95,12 +94,12 @@ static int ppr_mapper(orte_job_t *jdata)
     bool initial_map=true;
     bool gpu_mapping = false;
 
-    {
-        int delay = 1;
-        while( delay ){
-            sleep(1);
-        }
-    }
+//    {
+//        int delay = 1;
+//        while( delay ){
+//            sleep(1);
+//        }
+//    }
 
 
     /* only handle initial launch of loadbalanced
@@ -216,10 +215,10 @@ static int ppr_mapper(orte_job_t *jdata)
             n++;
 #if HAVE_CUDA
         } else if (0 == strncasecmp(ck[1], "gpu", len)) {
-            ppr[OPAL_HWLOC_NUMA_LEVEL] = strtol(ck[0], NULL, 10);
+            ppr[OPAL_HWLOC_NODE_LEVEL] = strtol(ck[0], NULL, 10);
             gpu_mapping = true;
-            if (start < OPAL_HWLOC_NUMA_LEVEL) {
-                start = OPAL_HWLOC_NUMA_LEVEL;
+            if (start < OPAL_HWLOC_NODE_LEVEL) {
+                start = OPAL_HWLOC_NODE_LEVEL;
                 ORTE_SET_MAPPING_POLICY(jdata->map->mapping, ORTE_MAPPING_BYGPU);
             }
             n++;
@@ -345,26 +344,21 @@ static int ppr_mapper(orte_job_t *jdata)
                                                           i, OPAL_HWLOC_AVAILABLE);
 #if (HAVE_CUDA)
                     if( gpu_mapping ){
-                        gpu_mapping = false;
                         int k;
+//                                {
+//                                    int delay = 1;
+//                                    while(delay){
+//                                        sleep(1);
+//                                    }
+//                                }
 
-                        //gpuno = discover_gpu(node->topology,obj);
                         int gpuno;
-                        gpuno=test_find_gpu(obj);
+                        gpuno=opal_hwloc_prefind_gpu(obj);
 
                         if( 0 == gpuno ){
                             // skip this numa node (if gpu_mapping => start = NUMA_LEVEL)
                             continue;
                         }
-
-                        // We want GPU# * ppr processes per NUMA.
-                        //int proc_num = gpuno * ppr[start];
-                        // TODO: Check that this numa can handle this number of processes
-                        // It depends on what is considered as processing element.
-                        /*if( check(obj, proc_num, pe_type) ){
-                            rc = ORTE_ERR_OUT_OF_RESOURCE;
-                            goto error;
-                        }*/
 
                         for( k=0; k < gpuno; k++){
                             for (j=0; j < ppr[start] && nprocs_mapped < total_procs; j++) {
@@ -374,7 +368,7 @@ static int ppr_mapper(orte_job_t *jdata)
                                 }
                                 nprocs_mapped++;
                                 orte_set_attribute(&proc->attributes, ORTE_PROC_HWLOC_LOCALE, ORTE_ATTR_LOCAL, obj, OPAL_PTR);
-                                orte_set_attribute(&proc->attributes, ORTE_PROC_GPU_ID, ORTE_ATTR_LOCAL, k, OPAL_INT);
+                                orte_set_attribute(&proc->attributes, ORTE_PROC_GPU_ID, ORTE_ATTR_LOCAL, (void*)&k, OPAL_INT);
                             }
                         }
                         continue;

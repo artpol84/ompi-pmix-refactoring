@@ -164,6 +164,7 @@ ORTE_DECLSPEC OBJ_CLASS_DECLARATION(orte_job_map_t);
 #define ORTE_RANK_BY_CORE           8
 #define ORTE_RANK_BY_HWTHREAD       9
 #define ORTE_RANK_BY_SLOT           10
+#define ORTE_RANK_BY_GPU            11
 #define ORTE_GET_RANKING_POLICY(pol) \
     ((pol) & 0x0fff)
 /* macro to determine if ranking policy is set */

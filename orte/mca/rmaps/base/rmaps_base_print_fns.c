@@ -218,6 +218,8 @@ char* orte_rmaps_base_print_ranking(orte_ranking_policy_t ranking)
         return "HWTHREAD";
     case ORTE_RANK_BY_SLOT:
         return "SLOT";
+    case ORTE_RANK_BY_GPU:
+        return "GPU";
     default:
         return "UNKNOWN";
     }

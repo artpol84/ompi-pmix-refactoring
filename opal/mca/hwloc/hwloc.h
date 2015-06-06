@@ -191,6 +191,7 @@ typedef uint16_t opal_binding_policy_t;
 #define OPAL_BIND_TO_CORE           8
 #define OPAL_BIND_TO_HWTHREAD       9
 #define OPAL_BIND_TO_CPUSET         10
+#define OPAL_BIND_TO_GPU            11
 #define OPAL_GET_BINDING_POLICY(pol) \
     ((pol) & 0x0fff)
 #define OPAL_SET_BINDING_POLICY(target, pol) \

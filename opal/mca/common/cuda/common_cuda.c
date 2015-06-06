@@ -473,8 +473,8 @@ int mca_common_cuda_stage_one_init(void)
 #if OPAL_CUDA_GET_ATTRIBUTES
     OPAL_CUDA_DLSYM(libcuda_handle, cuPointerGetAttributes);
 #endif /* OPAL_CUDA_GET_ATTRIBUTES */
-    OPAL_CUDA_DLSYM(libcuda_handle, cudaDeviceGetByPCIBusId);
-    OPAL_CUDA_DLSYM(libcuda_handle, cudaSetDevice);
+    //OPAL_CUDA_DLSYM(libcuda_handle, cudaDeviceGetByPCIBusId);
+    //OPAL_CUDA_DLSYM(libcuda_handle, cudaSetDevice);
 
 
     return 0;
@@ -482,6 +482,12 @@ int mca_common_cuda_stage_one_init(void)
 
 void mca_common_cuda_bind()
 {
+    {
+        int delay = 1;
+        while(delay){
+            sleep(1);
+        }
+    }
     char *mca_name, *mca_val, *PciBusId;
     int dev, numaid, gpuid;
     hwloc_obj_t bind_gpu;
@@ -489,10 +495,9 @@ void mca_common_cuda_bind()
     mca_val = getenv(mca_name);
     /* parse mcaval onto numaid and gpuid */
     sscanf(mca_val , "%d:%d", &numaid, &gpuid);
-    bind_gpu = opal_hwloc_base_gpu_pci_ids(numaid,gpuid);
+    //bind_gpu = opal_hwloc_base_gpu_pci_ids(numaid,gpuid);
     PciBusId = bind_gpu->attr->pcidev.bus;
     cudaDeviceGetByPCIBusId(&dev, PciBusId);
-
     cudaSetDevice(dev);
 }
 
