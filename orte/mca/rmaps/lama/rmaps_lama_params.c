@@ -162,6 +162,9 @@ int rmaps_lama_process_alias_params(orte_job_t *jdata)
         case OPAL_BIND_TO_HWTHREAD:
             rmaps_lama_cmd_bind = strdup("1h");
             break;
+        case OPAL_BIND_TO_GPU:
+            rmaps_lama_cmd_bind = strdup("1g");
+            break;
         case OPAL_BIND_TO_CPUSET:
             orte_show_help("help-orte-rmaps-lama.txt",
                            "invalid binding option",
