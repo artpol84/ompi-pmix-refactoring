@@ -846,15 +846,8 @@ mca_btl_smcuda_component_init(int *num_btls,
     mca_btl_smcuda_component.sm_mpool_base = NULL;
 
 #if OPAL_CUDA_SUPPORT
-    {
-        int delay = 1;
-        while(delay){
-            sleep(1);
-        }
-    }
-    mca_common_cuda_bind();
     mca_common_cuda_stage_one_init();
-
+    mca_common_cuda_bind();
 #endif /* OPAL_CUDA_SUPPORT */
     /* if no session directory was created, then we cannot be used */
     if (NULL == opal_process_info.job_session_dir) {

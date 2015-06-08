@@ -742,6 +742,7 @@ int orte_rmaps_base_compute_bindings(orte_job_t *jdata)
         hwb = HWLOC_OBJ_PU;
         break;
     case OPAL_BIND_TO_GPU:
+        // TODO: Is it correct to do so here?
         hwb = HWLOC_OBJ_NODE;
     default:
         ORTE_ERROR_LOG(ORTE_ERR_BAD_PARAM);

@@ -253,27 +253,22 @@ static void set(orte_job_t *jobdat,
 //            }
 //        }
 
-        int numa_idx, gpu_idx, *pgpu_idx = &gpu_idx;
+        int obj_type, obj_idx, gpu_idx, *pgpu_idx = &gpu_idx;
         hwloc_obj_t obj;
         if (orte_get_attribute(&child->attributes, ORTE_PROC_GPU_ID, (void**)&pgpu_idx, OPAL_INT) ){
             orte_get_attribute(&child->attributes, ORTE_PROC_HWLOC_LOCALE, (void**)&obj, OPAL_PTR);
-            //int numa_idx = get_numa_index(obj);
+            if( obj->type == HWLOC_OBJ_MACHINE ){
+                obj_type = 0;
+            } else {
+                obj_type = 1;
+            }
+            obj_idx=obj->logical_index;
 
-//            while (obj->type!=HWLOC_OBJ_NODE || obj->type!=HWLOC_OBJ_MACHINE)
-//                   obj=obj->parent;
-//            numa_idx = obj->logical_index;
-            numa_idx=obj->logical_index;
-            *pgpu_idx=obj;
             char *mca_val, *mca_name;
-            asprintf(&mca_val, "%d:%d", numa_idx, gpu_idx);
-            (void) mca_base_var_env_name ("rmaps_gpu_no", *mca_name);
+            asprintf(&mca_val, "%d:%d:%d", obj_type, obj_idx, gpu_idx);
+            (void) mca_base_var_env_name ("rmaps_gpu_no", &mca_name);
             opal_setenv(mca_name, mca_val, 1,environ_copy);
-//            {
-//                int delay = 1;
-//                while(delay){
-//                    sleep(1);
-//                }
-//            }
+
             //mca_common_cuda_bind();
 //            char *PciBusId;
 //            bind_gpu = opal_hwloc_get_gpu_by_idx(gpu_idx,obj);

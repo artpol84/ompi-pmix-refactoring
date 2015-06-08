@@ -143,7 +143,7 @@ exit:
 }
 
 hwloc_obj_t opal_hwloc_get_gpu_by_idx(int idx, hwloc_obj_t obj){
-    int cidx = 0;
+    int cidx = -1;
     hwloc_obj_t nobj = get_gpu_cnt(idx, obj, &cidx);
     if( cidx != idx ){
         // TODO_NV: output in verbose case
@@ -151,8 +151,6 @@ hwloc_obj_t opal_hwloc_get_gpu_by_idx(int idx, hwloc_obj_t obj){
     }
     return nobj;
 }
-
-
 
 //hwloc_obj_t opal_hwloc_base_gpu_pci_ids(int numa, int devno)
 //{
@@ -1665,9 +1663,6 @@ char* opal_hwloc_base_print_binding(opal_binding_policy_t binding)
         break;
     case OPAL_BIND_TO_CPUSET:
         bind = "CPUSET";
-        break;
-    case OPAL_BIND_TO_GPU:
-        bind = "GPU";
         break;
     default:
         bind = "UNKNOWN";

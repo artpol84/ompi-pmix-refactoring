@@ -821,9 +821,6 @@ int orte_rmaps_base_set_ranking_policy(orte_ranking_policy_t *policy,
             case ORTE_MAPPING_BYHWTHREAD:
                 ORTE_SET_RANKING_POLICY(tmp, ORTE_RANK_BY_HWTHREAD);
                 break;
-            case ORTE_MAPPING_BYGPU:
-                ORTE_SET_RANKING_POLICY(tmp, ORTE_RANK_BY_NODE);
-                break;
 #endif
             default:
                 /* anything not tied to a specific hw obj can rank by slot */
@@ -876,8 +873,6 @@ int orte_rmaps_base_set_ranking_policy(orte_ranking_policy_t *policy,
             ORTE_SET_RANKING_POLICY(tmp, ORTE_RANK_BY_NUMA);
         } else if (0 == strncasecmp(ck[0], "board", len)) {
             ORTE_SET_RANKING_POLICY(tmp, ORTE_RANK_BY_BOARD);
-        } else if (0 == strncasecmp(ck[0], "gpu", len)) {
-            ORTE_SET_RANKING_POLICY(tmp, ORTE_RANK_BY_NUMA);
 #endif
         } else {
             orte_show_help("help-orte-rmaps-base.txt", "unrecognized-policy", true, "ranking", rmaps_base_ranking_policy);

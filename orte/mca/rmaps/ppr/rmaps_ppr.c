@@ -215,10 +215,10 @@ static int ppr_mapper(orte_job_t *jdata)
             n++;
 #if HAVE_CUDA
         } else if (0 == strncasecmp(ck[1], "gpu", len)) {
-            ppr[OPAL_HWLOC_NODE_LEVEL] = strtol(ck[0], NULL, 10);
+            ppr[OPAL_HWLOC_NUMA_LEVEL] = strtol(ck[0], NULL, 10);
             gpu_mapping = true;
-            if (start < OPAL_HWLOC_NODE_LEVEL) {
-                start = OPAL_HWLOC_NODE_LEVEL;
+            if (start < OPAL_HWLOC_NUMA_LEVEL) {
+                start = OPAL_HWLOC_NUMA_LEVEL;
                 ORTE_SET_MAPPING_POLICY(jdata->map->mapping, ORTE_MAPPING_BYGPU);
             }
             n++;
@@ -314,6 +314,49 @@ static int ppr_mapper(orte_job_t *jdata)
             /* if we are mapping solely at the node level, just put
              * that many procs on this node
              */
+#if (HAVE_CUDA)
+            if( gpu_mapping ){
+                hwloc_obj_type_t cur_level = lowest;
+                nobjs = opal_hwloc_base_get_nbobjs_by_type(node->topology,
+                                                           cur_level, cache_level,
+                                                           OPAL_HWLOC_AVAILABLE);
+
+                if( nobjs == 0){
+                    cur_level = opal_hwloc_levels[OPAL_HWLOC_NODE_LEVEL];
+                    nobjs = opal_hwloc_base_get_nbobjs_by_type(node->topology,
+                                                               cur_level, cache_level,
+                                                               OPAL_HWLOC_AVAILABLE);
+                }
+                /* map the specified number of procs to each such resource on this node,
+                 * recording the locale of each proc so we know its cpuset
+                 */
+                for (i=0; i < nobjs; i++) {
+                    obj = opal_hwloc_base_get_obj_by_type(node->topology,
+                                                          cur_level, cache_level,
+                                                          i, OPAL_HWLOC_AVAILABLE);
+                    int k;
+                    int gpu_cnt;
+                    gpu_cnt = opal_hwloc_prefind_gpu(obj);
+
+                    if( 0 == gpu_cnt ){
+                        // skip this numa node (if gpu_mapping => start = NUMA_LEVEL)
+                        continue;
+                    }
+
+                    for( k=0; k < gpu_cnt; k++){
+                        for (j=0; j < ppr[start] && nprocs_mapped < total_procs; j++) {
+                            if (NULL == (proc = orte_rmaps_base_setup_proc(jdata, node, idx))) {
+                                rc = ORTE_ERR_OUT_OF_RESOURCE;
+                                goto error;
+                            }
+                            nprocs_mapped++;
+                            orte_set_attribute(&proc->attributes, ORTE_PROC_HWLOC_LOCALE, ORTE_ATTR_LOCAL, obj, OPAL_PTR);
+                            orte_set_attribute(&proc->attributes, ORTE_PROC_GPU_ID, ORTE_ATTR_LOCAL, (void*)&k, OPAL_INT);
+                        }
+                    }
+                }
+            } else
+#endif
             if (OPAL_HWLOC_NODE_LEVEL == start) {
 #if OPAL_HAVE_HWLOC
                 obj = hwloc_get_root_obj(node->topology);
@@ -335,45 +378,13 @@ static int ppr_mapper(orte_job_t *jdata)
                                                            lowest, cache_level,
                                                            OPAL_HWLOC_AVAILABLE);
 
-                /* map the specified number of procs to each such resource on this node,
+                 /* map the specified number of procs to each such resource on this node,
                  * recording the locale of each proc so we know its cpuset
                  */
                 for (i=0; i < nobjs; i++) {
                     obj = opal_hwloc_base_get_obj_by_type(node->topology,
                                                           lowest, cache_level,
                                                           i, OPAL_HWLOC_AVAILABLE);
-#if (HAVE_CUDA)
-                    if( gpu_mapping ){
-                        int k;
-//                                {
-//                                    int delay = 1;
-//                                    while(delay){
-//                                        sleep(1);
-//                                    }
-//                                }
-
-                        int gpuno;
-                        gpuno=opal_hwloc_prefind_gpu(obj);
-
-                        if( 0 == gpuno ){
-                            // skip this numa node (if gpu_mapping => start = NUMA_LEVEL)
-                            continue;
-                        }
-
-                        for( k=0; k < gpuno; k++){
-                            for (j=0; j < ppr[start] && nprocs_mapped < total_procs; j++) {
-                                if (NULL == (proc = orte_rmaps_base_setup_proc(jdata, node, idx))) {
-                                    rc = ORTE_ERR_OUT_OF_RESOURCE;
-                                    goto error;
-                                }
-                                nprocs_mapped++;
-                                orte_set_attribute(&proc->attributes, ORTE_PROC_HWLOC_LOCALE, ORTE_ATTR_LOCAL, obj, OPAL_PTR);
-                                orte_set_attribute(&proc->attributes, ORTE_PROC_GPU_ID, ORTE_ATTR_LOCAL, (void*)&k, OPAL_INT);
-                            }
-                        }
-                        continue;
-                    }
-#endif
 
                     for (j=0; j < ppr[start] && nprocs_mapped < total_procs; j++) {
                         if (NULL == (proc = orte_rmaps_base_setup_proc(jdata, node, idx))) {
