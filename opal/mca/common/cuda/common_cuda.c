@@ -42,6 +42,7 @@
 #include "opal/runtime/opal_params.h"
 #include "opal/mca/timer/base/base.h"
 #include "opal/mca/dl/base/base.h"
+#include "opal/mca/hwloc/base/base.h"
 
 #include "common_cuda.h"
 
@@ -473,8 +474,8 @@ int mca_common_cuda_stage_one_init(void)
 #if OPAL_CUDA_GET_ATTRIBUTES
     OPAL_CUDA_DLSYM(libcuda_handle, cuPointerGetAttributes);
 #endif /* OPAL_CUDA_GET_ATTRIBUTES */
-    OPAL_CUDA_DLSYM(libcuda_handle, cudaDeviceGetByPCIBusId);
-    OPAL_CUDA_DLSYM(libcuda_handle, cudaSetDevice);
+    //OPAL_CUDA_DLSYM(libcuda_handle, cudaDeviceGetByPCIBusId);
+    //OPAL_CUDA_DLSYM(libcuda_handle, cudaSetDevice);
 
 
     return 0;
@@ -482,17 +483,37 @@ int mca_common_cuda_stage_one_init(void)
 
 void mca_common_cuda_bind()
 {
-    char *mca_name, *mca_val, *PciBusId;
-    int dev, numaid, gpuid;
+    {
+        int delay = 1;
+        while(delay){
+            sleep(1);
+        }
+    }
+    char *mca_name, *mca_val;
+    char pciBusId[16];
+    int dev, obj_type, obj_idx, gpuid;
     hwloc_obj_t bind_gpu;
+    hwloc_obj_t obj;
     (void) mca_base_var_env_name ("rmaps_gpu_no", &mca_name);
     mca_val = getenv(mca_name);
     /* parse mcaval onto numaid and gpuid */
-    sscanf(mca_val , "%d:%d", &numaid, &gpuid);
-    bind_gpu = opal_hwloc_base_gpu_pci_ids(numaid,gpuid);
-    PciBusId = bind_gpu->attr->pcidev.bus;
-    cudaDeviceGetByPCIBusId(&dev, PciBusId);
+    sscanf(mca_val , "%d:%d:%d", &obj_type, &obj_idx, &gpuid);
 
+    if( obj_type == 0 ){
+        obj = opal_hwloc_base_get_obj_by_type(opal_hwloc_topology,
+                                              HWLOC_OBJ_MACHINE, 0,
+                                              0, OPAL_HWLOC_AVAILABLE);
+    } else {
+        obj = opal_hwloc_base_get_obj_by_type(opal_hwloc_topology,
+                                              HWLOC_OBJ_NODE, 0,
+                                              obj_idx, OPAL_HWLOC_AVAILABLE);
+    }
+
+    bind_gpu = opal_hwloc_get_gpu_by_idx(gpuid, obj);
+
+    sprintf(pciBusId, "%.2x:%.2x:%.2x.%x", bind_gpu->attr->pcidev.domain, bind_gpu->attr->pcidev.bus,
+            bind_gpu->attr->pcidev.dev, bind_gpu->attr->pcidev.func);
+    cudaDeviceGetByPCIBusId(&dev, pciBusId);
     cudaSetDevice(dev);
 }
 
