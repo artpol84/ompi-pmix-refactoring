@@ -20,6 +20,8 @@
 
 #include "ompi_config.h"
 
+#include <ibprof_api.h>
+
 #include "mpi.h"
 #include "ompi/constants.h"
 #include "ompi/datatype/ompi_datatype.h"
@@ -28,6 +30,9 @@
 #include "ompi/mca/coll/base/coll_base_functions.h"
 #include "ompi/mca/pml/pml.h"
 #include "coll_base_util.h"
+
+#define START_INTERVAL(a, b) if( begin_measure ){ ibprof_interval_start(a, b); }
+#define END_INTERVAL(a) if( begin_measure ){ ibprof_interval_end(a); }
 
 int ompi_coll_base_sendrecv_nonzero_actual( void* sendbuf, size_t scount,
                                              ompi_datatype_t* sdatatype,
@@ -63,7 +68,21 @@ int ompi_coll_base_sendrecv_nonzero_actual( void* sendbuf, size_t scount,
     }
 
     if (0 != nreqs) {
+
+        static int begin_measure = 0;
+        if( !begin_measure ){
+            char *str = getenv("START_MEASURE");
+            if( str != NULL ){
+                begin_measure = 1;
+            }
+        }
+
+        START_INTERVAL(120, "ompi_request_wait_all");
+
         err = ompi_request_wait_all( nreqs, reqs, statuses );
+
+        END_INTERVAL(120);
+
         if( MPI_ERR_IN_STATUS == err ) {
             /* As we use wait_all we will get MPI_ERR_IN_STATUS which is not an error
              * code that we can propagate up the stack. Instead, look for the real

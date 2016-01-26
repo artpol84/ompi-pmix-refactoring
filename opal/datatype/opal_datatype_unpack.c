@@ -21,6 +21,7 @@
  */
 
 #include "opal_config.h"
+#include <ibprof_api.h>
 
 #include <stddef.h>
 #include <stdio.h>
@@ -256,6 +257,10 @@ opal_unpack_partial_datatype( opal_convertor_t* pConvertor, dt_elem_desc_t* pEle
  *   contiguous but with a gap in the begining or at the end.
  * - the DT_CONTIGUOUS flag for the type OPAL_DATATYPE_END_LOOP is meaningless.
  */
+
+#define START_INTERVAL(a, b) if( begin_measure ){ ibprof_interval_start(a, b); }
+#define END_INTERVAL(a) if( begin_measure ){ ibprof_interval_end(a); }
+
 int32_t
 opal_generic_simple_unpack_function( opal_convertor_t* pConvertor,
                                      struct iovec* iov, uint32_t* out_size,
@@ -271,6 +276,17 @@ opal_generic_simple_unpack_function( opal_convertor_t* pConvertor,
     unsigned char *conv_ptr, *iov_ptr;
     size_t iov_len_local;
     uint32_t iov_count;
+
+    static int begin_measure = 0;
+    if( !begin_measure ){
+        char *str = getenv("START_MEASURE");
+        if( str != NULL ){
+            begin_measure = 1;
+        }
+    }
+
+    START_INTERVAL(112, "opal_simple_unpack_function");
+
 
     DO_DEBUG( opal_output( 0, "opal_convertor_generic_simple_unpack( %p, {%p, %lu}, %u )\n",
                            (void*)pConvertor, iov[0].iov_base, (unsigned long)iov[0].iov_len, *out_size ); );
@@ -408,6 +424,7 @@ opal_generic_simple_unpack_function( opal_convertor_t* pConvertor,
     *out_size = iov_count;
     if( pConvertor->bConverted == pConvertor->remote_size ) {
         pConvertor->flags |= CONVERTOR_COMPLETED;
+        END_INTERVAL(112);
         return 1;
     }
     /* Save the global position for the next round */
@@ -415,6 +432,7 @@ opal_generic_simple_unpack_function( opal_convertor_t* pConvertor,
                 conv_ptr - pConvertor->pBaseBuf );
     DO_DEBUG( opal_output( 0, "unpack save stack stack_pos %d pos_desc %d count_desc %d disp %ld\n",
                            pConvertor->stack_pos, pStack->index, (int)pStack->count, (long)pStack->disp ); );
+    END_INTERVAL(112);
     return 0;
 }
 

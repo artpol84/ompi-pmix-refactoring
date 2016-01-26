@@ -23,6 +23,8 @@
 
 #include "ompi_config.h"
 
+#include <ibprof_api.h>
+
 #include "mpi.h"
 #include "ompi/constants.h"
 #include "ompi/datatype/ompi_datatype.h"
@@ -190,6 +192,8 @@ int ompi_coll_base_alltoall_intra_pairwise(const void *sbuf, int scount,
     return err;
 }
 
+#define START_INTERVAL(a, b) if( begin_measure ){ ibprof_interval_start(a, b); }
+#define END_INTERVAL(a) if( begin_measure ){ ibprof_interval_end(a); }
 
 int ompi_coll_base_alltoall_intra_bruck(const void *sbuf, int scount,
                                          struct ompi_datatype_t *sdtype,
@@ -203,6 +207,14 @@ int ompi_coll_base_alltoall_intra_bruck(const void *sbuf, int scount,
     char *tmpbuf = NULL, *tmpbuf_free = NULL;
     OPAL_PTRDIFF_TYPE sext, rext, span, gap;
     struct ompi_datatype_t *new_ddt;
+
+    static int begin_measure = 0;
+    if( !begin_measure ){
+        char *str = getenv("START_MEASURE");
+        if( str != NULL ){
+            begin_measure = 1;
+        }
+    }
 
     if (MPI_IN_PLACE == sbuf) {
         return mca_coll_base_alltoall_intra_basic_inplace (rbuf, rcount, rdtype,
@@ -233,6 +245,8 @@ int ompi_coll_base_alltoall_intra_bruck(const void *sbuf, int scount,
     if (tmpbuf_free == NULL) { line = __LINE__; err = -1; goto err_hndl; }
     tmpbuf = tmpbuf_free - gap;
 
+    START_INTERVAL(117, "Bruck phase1");
+
     /* Step 1 - local rotation - shift up by rank */
     err = ompi_datatype_copy_content_same_ddt (sdtype,
                                                (int32_t) ((ptrdiff_t)(size - rank) * (ptrdiff_t)scount),
@@ -251,12 +265,18 @@ int ompi_coll_base_alltoall_intra_bruck(const void *sbuf, int scount,
         }
     }
 
+    END_INTERVAL(117);
+
+    START_INTERVAL(116, "Bruck phase2");
+
     /* perform communication step */
     for (distance = 1; distance < size; distance<<=1) {
 
         sendto = (rank + distance) % size;
         recvfrom = (rank - distance + size) % size;
         k = 0;
+
+        START_INTERVAL(114, "ompi_datatype_create");
 
         /* create indexed datatype */
         for (i = 1; i < size; i++) {
@@ -273,6 +293,8 @@ int ompi_coll_base_alltoall_intra_bruck(const void *sbuf, int scount,
         err = ompi_datatype_commit(&new_ddt);
         if (err != MPI_SUCCESS) { line = __LINE__; goto err_hndl;  }
 
+        END_INTERVAL(114);
+
         /* Sendreceive */
         err = ompi_coll_base_sendrecv ( tmpbuf, 1, new_ddt, sendto,
                                          MCA_COLL_BASE_TAG_ALLTOALL,
@@ -282,14 +304,22 @@ int ompi_coll_base_alltoall_intra_bruck(const void *sbuf, int scount,
         if (err != MPI_SUCCESS) { line = __LINE__; goto err_hndl; }
 
         /* Copy back new data from recvbuf to tmpbuf */
+        START_INTERVAL(113, "copy rcv buf to tmp");
         err = ompi_datatype_copy_content_same_ddt(new_ddt, 1,tmpbuf, (char *) rbuf);
         if (err < 0) { line = __LINE__; err = -1; goto err_hndl;  }
+        END_INTERVAL(113);
 
         /* free ddt */
+        START_INTERVAL(115, "ompi_datatype_destroy");
         err = ompi_datatype_destroy(&new_ddt);
+        END_INTERVAL(115);
+
         if (err != MPI_SUCCESS) { line = __LINE__; goto err_hndl;  }
     } /* end of for (distance = 1... */
 
+    END_INTERVAL(116);
+
+    START_INTERVAL(118, "Bruck phase3");
     /* Step 3 - local rotation - */
     for (i = 0; i < size; i++) {
 
@@ -299,10 +329,16 @@ int ompi_coll_base_alltoall_intra_bruck(const void *sbuf, int scount,
         if (err < 0) { line = __LINE__; err = -1; goto err_hndl;  }
     }
 
+    END_INTERVAL(118);
+
     /* Step 4 - clean up */
     if (tmpbuf != NULL) free(tmpbuf_free);
     if (displs != NULL) free(displs);
     if (blen != NULL) free(blen);
+
+
+
+
     return OMPI_SUCCESS;
 
  err_hndl:
