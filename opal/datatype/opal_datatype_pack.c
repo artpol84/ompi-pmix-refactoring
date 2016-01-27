@@ -314,7 +314,7 @@ opal_generic_simple_pack_function( opal_convertor_t* pConvertor,
      */
     pStack = pConvertor->pStack + pConvertor->stack_pos;
     pos_desc   = pStack->index;
-    conv_ptr   = pConvertor->pBaseBuf + pStack->disp;opal_generic_simple_pack;
+    conv_ptr   = pConvertor->pBaseBuf + pStack->disp;
     count_desc = (uint32_t)pStack->count;
     pStack--;
     pConvertor->stack_pos--;
