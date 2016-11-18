@@ -57,6 +57,7 @@
 #include "oshmem/constants.h"
 #include "oshmem/runtime/runtime.h"
 #include "oshmem/runtime/params.h"
+#include "oshmem/runtime/timing.h"
 #include "oshmem/runtime/oshmem_shmem_preconnect.h"
 #include "oshmem/mca/spml/base/base.h"
 #include "oshmem/mca/scoll/base/base.h"
@@ -145,17 +146,27 @@ int oshmem_shmem_init(int argc, char **argv, int requested, int *provided)
 {
     int ret = OSHMEM_SUCCESS;
 
+    OSHTMNG_INIT(32);
+
     if (!oshmem_shmem_initialized) {
+
+        OSHTMNG_START;
+
         if (!ompi_mpi_initialized && !ompi_mpi_finalized) {
             ret = ompi_mpi_init(argc, argv, requested, provided);
         }
+        OSHTMNG_END("ompi_mpi_init");
 
         if (OSHMEM_SUCCESS != ret) {
             return ret;
         }
 
         PMPI_Comm_dup(MPI_COMM_WORLD, &oshmem_comm_world);
+        OSHTMNG_END("PMPI_Comm_dup");
+        
         ret = _shmem_init(argc, argv, requested, provided);
+        OSHTMNG_END("_shmem_init");
+        
 
         if (OSHMEM_SUCCESS != ret) {
             return ret;
@@ -166,11 +177,15 @@ int oshmem_shmem_init(int argc, char **argv, int requested, int *provided)
             SHMEM_API_ERROR( "shmem_lock_init() failed");
             return OSHMEM_ERROR;
         }
+        OSHTMNG_END("shmem_lock_init");
 
         /* this is a collective op, implies barrier */
         MCA_MEMHEAP_CALL(get_all_mkeys());
+        OSHTMNG_END("get_all_mkeys()");
 
         oshmem_shmem_preconnect_all();
+        OSHTMNG_END("shmem_preconnect_all");
+
 #if OSHMEM_OPAL_THREAD_ENABLE
         pthread_t thread_id;
         int perr;
@@ -180,6 +195,9 @@ int oshmem_shmem_init(int argc, char **argv, int requested, int *provided)
             return OSHMEM_ERROR;
         }
 #endif
+        OSHTMNG_END("THREAD_ENABLE");
+
+        OSHTMNG_OUT;
     }
 #ifdef SIGUSR1
     signal(SIGUSR1,sighandler__SIGUSR1);
@@ -237,49 +255,63 @@ static int _shmem_init(int argc, char **argv, int requested, int *provided)
     int ret = OSHMEM_SUCCESS;
     char *error = NULL;
 
+    OSHTMNG_INIT(64);
+
+    OSHTMNG_START;
+
     /* Register the OSHMEM layer's MCA parameters */
     if (OSHMEM_SUCCESS != (ret = oshmem_shmem_register_params())) {
         error = "oshmem_info_register: oshmem_register_params failed";
         goto error;
     }
+    OSHTMNG_END("register_params");
+    
     /* Setting verbosity for macros like SHMEM_API_VERBOSE, SHMEM_API_ERROR.
      * We need to set it right after registering mca verbosity variables
      */
+
     shmem_api_logger_output = opal_output_open(NULL);
     opal_output_set_verbosity(shmem_api_logger_output,
                               oshmem_shmem_api_verbose);
+    OSHTMNG_END("opal_output_open");
 
     /* initialize info */
     if (OSHMEM_SUCCESS != (ret = oshmem_info_init())) {
         error = "oshmem_info_init() failed";
         goto error;
     }
+    OSHTMNG_END("oshmem_info_init");
 
     /* initialize proc */
     if (OSHMEM_SUCCESS != (ret = oshmem_proc_init())) {
         error = "oshmem_proc_init() failed";
         goto error;
     }
+    OSHTMNG_END("oshmem_proc_init");
 
     if (OSHMEM_SUCCESS != (ret = oshmem_group_cache_list_init())) {
         error = "oshmem_group_cache_list_init() failed";
         goto error;
     }
+    OSHTMNG_END("group_cache_list");
 
     if (OSHMEM_SUCCESS != (ret = oshmem_op_init())) {
         error = "oshmem_op_init() failed";
         goto error;
     }
+    OSHTMNG_END("oshmem_op_init");
 
     if (OSHMEM_SUCCESS != (ret = mca_base_framework_open(&oshmem_spml_base_framework, MCA_BASE_OPEN_DEFAULT))) {
         error = "mca_spml_base_open() failed";
         goto error;
     }
+    OSHTMNG_END("spml_open");
 
     if (OSHMEM_SUCCESS != (ret = mca_base_framework_open(&oshmem_scoll_base_framework, MCA_BASE_OPEN_DEFAULT))) {
         error = "mca_scoll_base_open() failed";
         goto error;
     }
+    OSHTMNG_END("scoll_open");
 
     if (OSHMEM_SUCCESS
             != (ret = mca_spml_base_select(OPAL_ENABLE_PROGRESS_THREADS,
@@ -287,6 +319,7 @@ static int _shmem_init(int argc, char **argv, int requested, int *provided)
         error = "mca_spml_base_select() failed";
         goto error;
     }
+    OSHTMNG_END("spml_select");
 
     if (OSHMEM_SUCCESS
             != (ret =
@@ -295,6 +328,7 @@ static int _shmem_init(int argc, char **argv, int requested, int *provided)
         error = "mca_scoll_base_find_available() failed";
         goto error;
     }
+    OSHTMNG_END("scoll_select");
 
     /* Initialize each SHMEM handle subsystem */
     /* Initialize requests */
@@ -303,10 +337,13 @@ static int _shmem_init(int argc, char **argv, int requested, int *provided)
         goto error;
     }
 
+    OSHTMNG_END("request_init");
+
     if (OSHMEM_SUCCESS != (ret = oshmem_proc_group_init())) {
         error = "oshmem_proc_group_init() failed";
         goto error;
     }
+    OSHTMNG_END("proc_group_init");
 
     /* start SPML/BTL's */
     ret = MCA_SPML_CALL(enable(true));
@@ -314,6 +351,7 @@ static int _shmem_init(int argc, char **argv, int requested, int *provided)
         error = "SPML control failed";
         goto error;
     }
+    OSHTMNG_END("spml_enable");
 
     ret =
             MCA_SPML_CALL(add_procs(oshmem_group_all->proc_array, oshmem_group_all->proc_count));
@@ -321,31 +359,37 @@ static int _shmem_init(int argc, char **argv, int requested, int *provided)
         error = "SPML add procs failed";
         goto error;
     }
+    OSHTMNG_END("spml_add_proc");
 
     if (OSHMEM_SUCCESS != (ret = mca_base_framework_open(&oshmem_sshmem_base_framework, MCA_BASE_OPEN_DEFAULT))) {
         error = "mca_sshmem_base_open() failed";
         goto error;
     }
+    OSHTMNG_END("sshmem_open");
 
     if (OSHMEM_SUCCESS != (ret = mca_sshmem_base_select())) {
         error = "mca_sshmem_base_select() failed";
         goto error;
     }
+    OSHTMNG_END("sshmem_select");
 
     if (OSHMEM_SUCCESS != (ret = mca_base_framework_open(&oshmem_memheap_base_framework, MCA_BASE_OPEN_DEFAULT))) {
         error = "mca_memheap_base_open() failed";
         goto error;
     }
+    OSHTMNG_END("memheap_open");
 
     if (OSHMEM_SUCCESS != (ret = mca_memheap_base_select())) {
         error = "mca_memheap_base_select() failed";
         goto error;
     }
+    OSHTMNG_END("memheap_select");
 
     if (OSHMEM_SUCCESS != (ret = mca_base_framework_open(&oshmem_atomic_base_framework, MCA_BASE_OPEN_DEFAULT))) {
         error = "mca_atomic_base_open() failed";
         goto error;
     }
+    OSHTMNG_END("atomic_open");
 
     if (OSHMEM_SUCCESS
             != (ret =
@@ -354,14 +398,19 @@ static int _shmem_init(int argc, char **argv, int requested, int *provided)
         error = "mca_atomic_base_find_available() failed";
         goto error;
     }
+    OSHTMNG_END("atomic_select");
 
     /* This call should be done after memheap initialization */
     if (OSHMEM_SUCCESS != (ret = mca_scoll_enable())) {
         error = "mca_scoll_enable() failed";
         goto error;
     }
+    OSHTMNG_END("scoll_enable");
 
-    error: if (ret != OSHMEM_SUCCESS) {
+    OSHTMNG_OUT;    
+
+    error:
+     if (ret != OSHMEM_SUCCESS) {
         const char *err_msg = opal_strerror(ret);
         orte_show_help("help-shmem-runtime.txt",
                        "shmem_init:startup:internal-failure",

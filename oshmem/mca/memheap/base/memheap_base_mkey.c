@@ -28,6 +28,8 @@
 #include "oshmem/mca/memheap/base/base.h"
 #include "oshmem/mca/spml/spml.h"
 
+#include "oshmem/runtime/timing.h"
+
 /* Turn ON/OFF debug output from build (default 0) */
 #ifndef MEMHEAP_BASE_DEBUG
 #define MEMHEAP_BASE_DEBUG    0
@@ -528,8 +530,14 @@ void mca_memheap_modex_recv_all(void)
     int rc = OSHMEM_SUCCESS;
     size_t buffer_size;
 
+    OSHTMNG_INIT(32);
+
+    OSHTMNG_START;
+
     if (!mca_memheap_base_key_exchange) {
         oshmem_shmem_barrier();
+        OSHTMNG_END("oshmem_shmem_barrier");
+        OSHTMNG_OUT;
         return;
     }
 
@@ -572,6 +580,7 @@ void mca_memheap_modex_recv_all(void)
         pack_local_mkeys(msg, 0, j);
     }
 
+
     /* we assume here that int32_t returned by opal_dss.unload
      * is equal to size of int we use for MPI_Allgather, MPI_Allgatherv */
 
@@ -581,6 +590,8 @@ void mca_memheap_modex_recv_all(void)
     opal_dss.unload(msg, &send_buffer, &size);
     MEMHEAP_VERBOSE(1, "local keys packed into %d bytes, %d segments", size, memheap_map->n_segments);
 
+    OSHTMNG_END("allocate_and_init");
+
     /* we need to send num_transports and message sizes separately
      * since message sizes depend on types of btl used */
 
@@ -589,12 +600,14 @@ void mca_memheap_modex_recv_all(void)
         MEMHEAP_ERROR("allgather failed");
         goto exit_fatal;
     }
+    OSHTMNG_END("allgather_ntransp");
 
     rc = oshmem_shmem_allgather(&size, rcv_size, sizeof(int));
     if (MPI_SUCCESS != rc) {
         MEMHEAP_ERROR("allgather failed");
         goto exit_fatal;
     }
+    OSHTMNG_END("allgather_rcv_size");
 
     /* calculating offsets (displacements) for allgatherv */
 
@@ -611,6 +624,7 @@ void mca_memheap_modex_recv_all(void)
         rc = OSHMEM_ERR_OUT_OF_RESOURCE;
         goto exit_fatal;
     }
+    OSHTMNG_END("prep_buffer");
 
     rc = oshmem_shmem_allgatherv(send_buffer, rcv_buffer, size, rcv_size, rcv_offsets);
     if (MPI_SUCCESS != rc) {
@@ -618,6 +632,7 @@ void mca_memheap_modex_recv_all(void)
         MEMHEAP_ERROR("allgatherv failed");
         goto exit_fatal;
     }
+    OSHTMNG_END("allgatherv");
 
     opal_dss.load(msg, rcv_buffer, buffer_size);
 
@@ -649,6 +664,8 @@ void mca_memheap_modex_recv_all(void)
             unpack_remote_mkeys(msg, i);
         }
     }
+    OSHTMNG_END("unpack");
+    OSHTMNG_OUT;
 
     OPAL_THREAD_UNLOCK(&memheap_oob.lck);
 
