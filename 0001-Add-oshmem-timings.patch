@@ -1,0 +1,421 @@
+From b4ea2c9875e5b1cf715f66c4ebe43bc2d22e53d4 Mon Sep 17 00:00:00 2001
+From: Artem Polyakov <artpol84@gmail.com>
+Date: Sat, 19 Nov 2016 01:55:52 +0200
+Subject: [PATCH] Add oshmem timings
+
+---
+ oshmem/mca/memheap/base/memheap_base_mkey.c | 17 ++++++
+ oshmem/runtime/oshmem_shmem_init.c          | 51 ++++++++++++++++-
+ oshmem/runtime/timing.h                     | 87 +++++++++++++++++++++++++++++
+ 3 files changed, 154 insertions(+), 1 deletion(-)
+ create mode 100644 oshmem/runtime/timing.h
+
+diff --git a/oshmem/mca/memheap/base/memheap_base_mkey.c b/oshmem/mca/memheap/base/memheap_base_mkey.c
+index 424c29f..96f7d6d 100644
+--- a/oshmem/mca/memheap/base/memheap_base_mkey.c
++++ b/oshmem/mca/memheap/base/memheap_base_mkey.c
+@@ -28,6 +28,8 @@
+ #include "oshmem/mca/memheap/base/base.h"
+ #include "oshmem/mca/spml/spml.h"
+ 
++#include "oshmem/runtime/timing.h"
++
+ /* Turn ON/OFF debug output from build (default 0) */
+ #ifndef MEMHEAP_BASE_DEBUG
+ #define MEMHEAP_BASE_DEBUG    0
+@@ -545,8 +547,14 @@ void mca_memheap_modex_recv_all(void)
+     int rc = OSHMEM_SUCCESS;
+     size_t buffer_size;
+ 
++    OSHTMNG_INIT(32);
++
++    OSHTMNG_START;
++
+     if (!mca_memheap_base_key_exchange) {
+         oshmem_shmem_barrier();
++        OSHTMNG_END("oshmem_shmem_barrier");
++        OSHTMNG_OUT;
+         return;
+     }
+ 
+@@ -589,6 +597,7 @@ void mca_memheap_modex_recv_all(void)
+         pack_local_mkeys(msg, 0, j, 1);
+     }
+ 
++
+     /* we assume here that int32_t returned by opal_dss.unload
+      * is equal to size of int we use for MPI_Allgather, MPI_Allgatherv */
+ 
+@@ -598,6 +607,8 @@ void mca_memheap_modex_recv_all(void)
+     opal_dss.unload(msg, &send_buffer, &size);
+     MEMHEAP_VERBOSE(1, "local keys packed into %d bytes, %d segments", size, memheap_map->n_segments);
+ 
++    OSHTMNG_END("allocate_and_init");
++
+     /* we need to send num_transports and message sizes separately
+      * since message sizes depend on types of btl used */
+ 
+@@ -606,12 +617,14 @@ void mca_memheap_modex_recv_all(void)
+         MEMHEAP_ERROR("allgather failed");
+         goto exit_fatal;
+     }
++    OSHTMNG_END("allgather_ntransp");
+ 
+     rc = oshmem_shmem_allgather(&size, rcv_size, sizeof(int));
+     if (MPI_SUCCESS != rc) {
+         MEMHEAP_ERROR("allgather failed");
+         goto exit_fatal;
+     }
++    OSHTMNG_END("allgather_rcv_size");
+ 
+     /* calculating offsets (displacements) for allgatherv */
+ 
+@@ -628,6 +641,7 @@ void mca_memheap_modex_recv_all(void)
+         rc = OSHMEM_ERR_OUT_OF_RESOURCE;
+         goto exit_fatal;
+     }
++    OSHTMNG_END("prep_buffer");
+ 
+     rc = oshmem_shmem_allgatherv(send_buffer, rcv_buffer, size, rcv_size, rcv_offsets);
+     if (MPI_SUCCESS != rc) {
+@@ -635,6 +649,7 @@ void mca_memheap_modex_recv_all(void)
+         MEMHEAP_ERROR("allgatherv failed");
+         goto exit_fatal;
+     }
++    OSHTMNG_END("allgatherv");
+ 
+     opal_dss.load(msg, rcv_buffer, buffer_size);
+ 
+@@ -665,6 +680,8 @@ void mca_memheap_modex_recv_all(void)
+             unpack_remote_mkeys(msg, i);
+         }
+     }
++    OSHTMNG_END("unpack");
++    OSHTMNG_OUT;
+ 
+     OPAL_THREAD_UNLOCK(&memheap_oob.lck);
+ 
+diff --git a/oshmem/runtime/oshmem_shmem_init.c b/oshmem/runtime/oshmem_shmem_init.c
+index 9194e83..96fd9dd 100644
+--- a/oshmem/runtime/oshmem_shmem_init.c
++++ b/oshmem/runtime/oshmem_shmem_init.c
+@@ -57,6 +57,7 @@
+ #include "oshmem/constants.h"
+ #include "oshmem/runtime/runtime.h"
+ #include "oshmem/runtime/params.h"
++#include "oshmem/runtime/timing.h"
+ #include "oshmem/runtime/oshmem_shmem_preconnect.h"
+ #include "oshmem/mca/spml/base/base.h"
+ #include "oshmem/mca/scoll/base/base.h"
+@@ -145,17 +146,27 @@ int oshmem_shmem_init(int argc, char **argv, int requested, int *provided)
+ {
+     int ret = OSHMEM_SUCCESS;
+ 
++    OSHTMNG_INIT(32);
++
+     if (!oshmem_shmem_initialized) {
++
++        OSHTMNG_START;
++
+         if (!ompi_mpi_initialized && !ompi_mpi_finalized) {
+             ret = ompi_mpi_init(argc, argv, requested, provided);
+         }
++        OSHTMNG_END("ompi_mpi_init");
+ 
+         if (OSHMEM_SUCCESS != ret) {
+             return ret;
+         }
+ 
+         PMPI_Comm_dup(MPI_COMM_WORLD, &oshmem_comm_world);
++        OSHTMNG_END("PMPI_Comm_dup");
++        
+         ret = _shmem_init(argc, argv, requested, provided);
++        OSHTMNG_END("_shmem_init");
++        
+ 
+         if (OSHMEM_SUCCESS != ret) {
+             return ret;
+@@ -166,11 +177,15 @@ int oshmem_shmem_init(int argc, char **argv, int requested, int *provided)
+             SHMEM_API_ERROR( "shmem_lock_init() failed");
+             return OSHMEM_ERROR;
+         }
++        OSHTMNG_END("shmem_lock_init");
+ 
+         /* this is a collective op, implies barrier */
+         MCA_MEMHEAP_CALL(get_all_mkeys());
++        OSHTMNG_END("get_all_mkeys()");
+ 
+         oshmem_shmem_preconnect_all();
++        OSHTMNG_END("shmem_preconnect_all");
++
+ #if OSHMEM_OPAL_THREAD_ENABLE
+         pthread_t thread_id;
+         int perr;
+@@ -180,6 +195,9 @@ int oshmem_shmem_init(int argc, char **argv, int requested, int *provided)
+             return OSHMEM_ERROR;
+         }
+ #endif
++        OSHTMNG_END("THREAD_ENABLE");
++
++        OSHTMNG_OUT;
+     }
+ #ifdef SIGUSR1
+     signal(SIGUSR1,sighandler__SIGUSR1);
+@@ -237,49 +255,63 @@ static int _shmem_init(int argc, char **argv, int requested, int *provided)
+     int ret = OSHMEM_SUCCESS;
+     char *error = NULL;
+ 
++    OSHTMNG_INIT(64);
++
++    OSHTMNG_START;
++
+     /* Register the OSHMEM layer's MCA parameters */
+     if (OSHMEM_SUCCESS != (ret = oshmem_shmem_register_params())) {
+         error = "oshmem_info_register: oshmem_register_params failed";
+         goto error;
+     }
++    OSHTMNG_END("register_params");
++    
+     /* Setting verbosity for macros like SHMEM_API_VERBOSE, SHMEM_API_ERROR.
+      * We need to set it right after registering mca verbosity variables
+      */
++
+     shmem_api_logger_output = opal_output_open(NULL);
+     opal_output_set_verbosity(shmem_api_logger_output,
+                               oshmem_shmem_api_verbose);
++    OSHTMNG_END("opal_output_open");
+ 
+     /* initialize info */
+     if (OSHMEM_SUCCESS != (ret = oshmem_info_init())) {
+         error = "oshmem_info_init() failed";
+         goto error;
+     }
++    OSHTMNG_END("oshmem_info_init");
+ 
+     /* initialize proc */
+     if (OSHMEM_SUCCESS != (ret = oshmem_proc_init())) {
+         error = "oshmem_proc_init() failed";
+         goto error;
+     }
++    OSHTMNG_END("oshmem_proc_init");
+ 
+     if (OSHMEM_SUCCESS != (ret = oshmem_group_cache_list_init())) {
+         error = "oshmem_group_cache_list_init() failed";
+         goto error;
+     }
++    OSHTMNG_END("group_cache_list");
+ 
+     if (OSHMEM_SUCCESS != (ret = oshmem_op_init())) {
+         error = "oshmem_op_init() failed";
+         goto error;
+     }
++    OSHTMNG_END("oshmem_op_init");
+ 
+     if (OSHMEM_SUCCESS != (ret = mca_base_framework_open(&oshmem_spml_base_framework, MCA_BASE_OPEN_DEFAULT))) {
+         error = "mca_spml_base_open() failed";
+         goto error;
+     }
++    OSHTMNG_END("spml_open");
+ 
+     if (OSHMEM_SUCCESS != (ret = mca_base_framework_open(&oshmem_scoll_base_framework, MCA_BASE_OPEN_DEFAULT))) {
+         error = "mca_scoll_base_open() failed";
+         goto error;
+     }
++    OSHTMNG_END("scoll_open");
+ 
+     if (OSHMEM_SUCCESS
+             != (ret = mca_spml_base_select(OPAL_ENABLE_PROGRESS_THREADS,
+@@ -287,6 +319,7 @@ static int _shmem_init(int argc, char **argv, int requested, int *provided)
+         error = "mca_spml_base_select() failed";
+         goto error;
+     }
++    OSHTMNG_END("spml_select");
+ 
+     if (OSHMEM_SUCCESS
+             != (ret =
+@@ -295,6 +328,7 @@ static int _shmem_init(int argc, char **argv, int requested, int *provided)
+         error = "mca_scoll_base_find_available() failed";
+         goto error;
+     }
++    OSHTMNG_END("scoll_select");
+ 
+     /* Initialize each SHMEM handle subsystem */
+     /* Initialize requests */
+@@ -303,10 +337,13 @@ static int _shmem_init(int argc, char **argv, int requested, int *provided)
+         goto error;
+     }
+ 
++    OSHTMNG_END("request_init");
++
+     if (OSHMEM_SUCCESS != (ret = oshmem_proc_group_init())) {
+         error = "oshmem_proc_group_init() failed";
+         goto error;
+     }
++    OSHTMNG_END("proc_group_init");
+ 
+     /* start SPML/BTL's */
+     ret = MCA_SPML_CALL(enable(true));
+@@ -314,6 +351,7 @@ static int _shmem_init(int argc, char **argv, int requested, int *provided)
+         error = "SPML control failed";
+         goto error;
+     }
++    OSHTMNG_END("spml_enable");
+ 
+     ret =
+             MCA_SPML_CALL(add_procs(oshmem_group_all->proc_array, oshmem_group_all->proc_count));
+@@ -321,31 +359,37 @@ static int _shmem_init(int argc, char **argv, int requested, int *provided)
+         error = "SPML add procs failed";
+         goto error;
+     }
++    OSHTMNG_END("spml_add_proc");
+ 
+     if (OSHMEM_SUCCESS != (ret = mca_base_framework_open(&oshmem_sshmem_base_framework, MCA_BASE_OPEN_DEFAULT))) {
+         error = "mca_sshmem_base_open() failed";
+         goto error;
+     }
++    OSHTMNG_END("sshmem_open");
+ 
+     if (OSHMEM_SUCCESS != (ret = mca_sshmem_base_select())) {
+         error = "mca_sshmem_base_select() failed";
+         goto error;
+     }
++    OSHTMNG_END("sshmem_select");
+ 
+     if (OSHMEM_SUCCESS != (ret = mca_base_framework_open(&oshmem_memheap_base_framework, MCA_BASE_OPEN_DEFAULT))) {
+         error = "mca_memheap_base_open() failed";
+         goto error;
+     }
++    OSHTMNG_END("memheap_open");
+ 
+     if (OSHMEM_SUCCESS != (ret = mca_memheap_base_select())) {
+         error = "mca_memheap_base_select() failed";
+         goto error;
+     }
++    OSHTMNG_END("memheap_select");
+ 
+     if (OSHMEM_SUCCESS != (ret = mca_base_framework_open(&oshmem_atomic_base_framework, MCA_BASE_OPEN_DEFAULT))) {
+         error = "mca_atomic_base_open() failed";
+         goto error;
+     }
++    OSHTMNG_END("atomic_open");
+ 
+     if (OSHMEM_SUCCESS
+             != (ret =
+@@ -354,14 +398,19 @@ static int _shmem_init(int argc, char **argv, int requested, int *provided)
+         error = "mca_atomic_base_find_available() failed";
+         goto error;
+     }
++    OSHTMNG_END("atomic_select");
+ 
+     /* This call should be done after memheap initialization */
+     if (OSHMEM_SUCCESS != (ret = mca_scoll_enable())) {
+         error = "mca_scoll_enable() failed";
+         goto error;
+     }
++    OSHTMNG_END("scoll_enable");
++
++    OSHTMNG_OUT;    
+ 
+-    error: if (ret != OSHMEM_SUCCESS) {
++    error:
++     if (ret != OSHMEM_SUCCESS) {
+         const char *err_msg = opal_strerror(ret);
+         orte_show_help("help-shmem-runtime.txt",
+                        "shmem_init:startup:internal-failure",
+diff --git a/oshmem/runtime/timing.h b/oshmem/runtime/timing.h
+new file mode 100644
+index 0000000..499796f
+--- /dev/null
++++ b/oshmem/runtime/timing.h
+@@ -0,0 +1,87 @@
++#ifndef OSHTMNG_TIMING_H
++#define OSHTMNG_TIMING_H
++
++#include <time.h>
++#include <string.h>
++#include <stdlib.h>
++
++#include "oshmem_config.h"
++
++#include "oshmem/constants.h"
++#include "oshmem/runtime/runtime.h"
++#include "oshmem/runtime/params.h"
++
++static inline double OSHTMNG_GET_TS(void)
++{
++    struct timespec ts;
++    double ret;
++    clock_gettime(CLOCK_MONOTONIC, &ts);
++    ret = ts.tv_sec + 1E-9 * ts.tv_nsec;
++    return ret;
++}
++
++#define OSHTMNG_INIT(inum)                              \
++        double OSHTMNG_ts;                              \
++        const char *OSHTMNG_prefix = __FUNCTION__;      \
++        int OSHTMNG_cnt = 0;                            \
++        int OSHTMNG_inum = inum;                        \
++        double OSHTMNG_in[inum]  = { 0.0 };             \
++        double OSHTMNG_max[inum] = { 0.0 };             \
++        double OSHTMNG_min[inum] = { 0.0 };             \
++        double OSHTMNG_avg[inum] = { 0.0 };             \
++        char *OSHTMNG_desc[inum] = { 0 };
++
++#define OSHTMNG_START {                     \
++    OSHTMNG_ts = OSHTMNG_GET_TS();            \
++}
++
++#define OSHTMNG_END(desc) {                                       \
++    char *ptr = strrchr(__FILE__, '/');                           \
++    if( NULL == ptr ){                                            \
++        ptr = __FILE__;                                           \
++    } else {                                                      \
++        ptr++;                                                    \
++    }                                                             \
++    if( OSHTMNG_inum <= OSHTMNG_cnt ){                            \
++        printf("OSHTMNG [%s:%d %s]: interval count overflow!!\n", \
++            ptr, __LINE__, __FUNCTION__);                         \
++        abort();                                                  \
++    }                                                             \
++    OSHTMNG_in[OSHTMNG_cnt] =    OSHTMNG_GET_TS() - OSHTMNG_ts;   \
++    OSHTMNG_desc[OSHTMNG_cnt++] = desc;                           \
++    OSHTMNG_ts = OSHTMNG_GET_TS();                                \
++}
++
++#define OSHTMNG_OUT {                                                   \
++    int i, size, rank;                                                  \
++    MPI_Comm_size(MPI_COMM_WORLD, &size);                               \
++    MPI_Comm_rank(MPI_COMM_WORLD, &rank);                               \
++    char ename[1024];                                                   \
++    sprintf(ename, "OSHTMNG_%s", OSHTMNG_prefix);                       \
++    char *ptr = getenv(ename);                                          \
++                                                                        \
++    if( NULL != ptr ) {                                                 \
++        OSHTMNG_ts = OSHTMNG_GET_TS();                                  \
++        MPI_Reduce(OSHTMNG_in, OSHTMNG_avg, OSHTMNG_cnt, MPI_DOUBLE,    \
++                    MPI_SUM, 0, MPI_COMM_WORLD);                        \
++        MPI_Reduce(OSHTMNG_in, OSHTMNG_min, OSHTMNG_cnt, MPI_DOUBLE,    \
++                    MPI_MIN, 0, MPI_COMM_WORLD);                        \
++        MPI_Reduce(OSHTMNG_in, OSHTMNG_max, OSHTMNG_cnt, MPI_DOUBLE,    \
++                    MPI_MAX, 0, MPI_COMM_WORLD);                        \
++                                                                        \
++        if( 0 == rank ){                                                \
++            printf("------------------ %s ------------------\n",        \
++                    OSHTMNG_prefix);                                    \
++            for(i=0; i< OSHTMNG_cnt; i++){                              \
++                OSHTMNG_avg[i] /= size;                                 \
++                printf("[%s:%s]: %lf / %lf / %lf\n",                    \
++                    OSHTMNG_prefix,OSHTMNG_desc[i],                     \
++                    OSHTMNG_avg[i], OSHTMNG_min[i], OSHTMNG_max[i]);    \
++            }                                                           \
++            printf("[%s:overhead]: %lf \n", OSHTMNG_prefix,             \
++                    OSHTMNG_GET_TS() - OSHTMNG_ts);                     \
++        }                                                               \
++    }                                                                   \
++}
++
++#endif
+\ No newline at end of file
+-- 
+1.9.1
+
