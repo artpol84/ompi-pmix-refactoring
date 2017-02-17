@@ -5,11 +5,11 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "oshmem_config.h"
+//#include "oshmem_config.h"
 
-#include "oshmem/constants.h"
-#include "oshmem/runtime/runtime.h"
-#include "oshmem/runtime/params.h"
+//#include "oshmem/constants.h"
+//#include "oshmem/runtime/runtime.h"
+//#include "oshmem/runtime/params.h"
 
 static inline double OSHTMNG_GET_TS(void)
 {

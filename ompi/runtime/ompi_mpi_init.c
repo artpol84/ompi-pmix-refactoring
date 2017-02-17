@@ -94,6 +94,8 @@
 #include "ompi/dpm/dpm.h"
 #include "ompi/mpiext/mpiext.h"
 
+#include "oshmem/runtime/timing.h"
+
 /* newer versions of gcc have poisoned this deprecated feature */
 #if HAVE___MALLOC_INITIALIZE_HOOK
 #include "opal/mca/memory/base/base.h"
@@ -385,6 +387,9 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
     OPAL_TIMING_DECLARE(tm);
     OPAL_TIMING_INIT_EXT(&tm, OPAL_TIMING_GET_TIME_OF_DAY);
 
+    OSHTMNG_INIT(32);
+    OSHTMNG_START;
+
     /* bitflag of the thread level support provided. To be used
      * for the modex in order to work in heterogeneous environments. */
     uint8_t threadlevel_bf;
@@ -411,6 +416,7 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
     /* Indicate that we have *started* MPI_INIT* */
     ompi_mpi_init_started = true;
 
+    OSHTMNG_END("check_init");
     /* Figure out the final MPI thread levels.  If we were not
        compiled for support for MPI threads, then don't allow
        MPI_THREAD_MULTIPLE.  Set this stuff up here early in the
@@ -424,6 +430,8 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
         error = "ompi_mpi_init: opal_init_util failed";
         goto error;
     }
+
+    OSHTMNG_END("opal_init_util");
 
     /* If thread support was enabled, then setup OPAL to allow for them. This must be done
      * early to prevent a race condition that can occur with orte_init(). */
@@ -476,6 +484,8 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
     }
 
     OPAL_TIMING_MSTART((&tm,"time from start to completion of rte_init"));
+    OSHTMNG_END("mca_stuff");
+
 
     /* if we were not externally started, then we need to setup
      * some envars so the MPI_INFO_ENV can get the cmd name
@@ -501,12 +511,16 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
     }
     /* no select is required as this is a static framework */
 
+
+
     /* Setup RTE */
     if (OMPI_SUCCESS != (ret = ompi_rte_init(NULL, NULL))) {
         error = "ompi_mpi_init: ompi_rte_init failed";
         goto error;
     }
     ompi_rte_initialized = true;
+
+    OSHTMNG_END("ompi_rte_init");
 
     /* check for timing request - get stop time and report elapsed time if so */
     OPAL_TIMING_MNEXT((&tm,"time from completion of rte_init to modex"));
@@ -520,6 +534,8 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
             goto error;
         }
     }
+
+    OSHTMNG_END("hwloc_topology");
 
     /* Register the default errhandler callback - RTE will ignore if it
      * doesn't support this capability
@@ -629,6 +645,7 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
 
     /* check for timing request - get stop time and report elapsed time if so */
     OPAL_TIMING_MNEXT((&tm,"time to execute modex"));
+    OSHTMNG_END("open_frameworks");
 
     /* exchange connection info - this function may also act as a barrier
      * if data exchange is required. The modex occurs solely across procs
@@ -646,6 +663,7 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
         }
     }
 
+    OSHTMNG_END("modex");
     OPAL_TIMING_MNEXT((&tm,"time from modex to first barrier"));
 
     /* select buffered send allocator component to be used */
@@ -746,6 +764,8 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
         goto error;
     }
 
+    OSHTMNG_END("various_init");
+
     /* start PML/BTL's */
     ret = MCA_PML_CALL(enable(true));
     if( OMPI_SUCCESS != ret ) {
@@ -771,6 +791,8 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
     }
     ret = MCA_PML_CALL(add_procs(procs, nprocs));
     free(procs);
+
+    OSHTMNG_END("ompi/add_proc");
     /* If we got "unreachable", then print a specific error message.
        Otherwise, if we got some other failure, fall through to print
        a generic message. */
@@ -787,6 +809,8 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
     MCA_PML_CALL(add_comm(&ompi_mpi_comm_world.comm));
     MCA_PML_CALL(add_comm(&ompi_mpi_comm_self.comm));
 
+    OSHTMNG_END("ompi/add_comm");
+
     /*
      * Dump all MCA parameters if requested
      */
@@ -801,6 +825,7 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
 
     /* Next timing measurement */
     OPAL_TIMING_MNEXT((&tm,"time to execute barrier"));
+    OSHTMNG_END("ompi/mca_and_dbg");
 
     /* wait for everyone to reach this point - this is a hard
      * barrier requirement at this time, though we hope to relax
@@ -814,6 +839,8 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
     } else {
         opal_pmix.fence(NULL, false);
     }
+
+    OSHTMNG_END("ompi/barrier");
 
     /* check for timing request - get stop time and report elapsed
        time if so, then start the clock again */
@@ -945,5 +972,9 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
     OPAL_TIMING_RELEASE(&tm);
 
     opal_mutex_unlock(&ompi_mpi_bootstrap_mutex);
+
+    OSHTMNG_END("ompi/rest_of_init");
+    OSHTMNG_OUT;
+
     return MPI_SUCCESS;
 }
