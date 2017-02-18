@@ -96,7 +96,8 @@ typedef orte_error_t ompi_rte_error_report_t;
 #define OMPI_ERROR_LOG ORTE_ERROR_LOG
 
 /* Init and finalize objects and operations */
-#define ompi_rte_init(a, b) orte_init(a, b, ORTE_PROC_MPI)
+#define ompi_rte_init(a, b, c, d, e) orte_init(a, b, ORTE_PROC_MPI, c, d, e)
+
 #define ompi_rte_finalize() orte_finalize()
 OMPI_DECLSPEC void ompi_rte_wait_for_debugger(void);
 

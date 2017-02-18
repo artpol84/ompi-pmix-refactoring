@@ -340,13 +340,16 @@ int orte_daemon(int argc, char *argv[])
      * up incorrect infrastructure that only a singleton would
      * require.
      */
+    double ts[32];
+    char* desc[32];
+    int   counter;
     if (orted_globals.hnp) {
-        if (ORTE_SUCCESS != (ret = orte_init(&argc, &argv, ORTE_PROC_HNP))) {
+        if (ORTE_SUCCESS != (ret = orte_init(&argc, &argv, ORTE_PROC_HNP, ts, desc, &counter))) {
             ORTE_ERROR_LOG(ret);
             return ret;
         }
     } else {
-        if (ORTE_SUCCESS != (ret = orte_init(&argc, &argv, ORTE_PROC_DAEMON))) {
+        if (ORTE_SUCCESS != (ret = orte_init(&argc, &argv, ORTE_PROC_DAEMON, ts, desc, &counter))) {
             ORTE_ERROR_LOG(ret);
             return ret;
         }

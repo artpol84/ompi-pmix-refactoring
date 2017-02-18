@@ -384,6 +384,10 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
     char *error = NULL;
     char *cmd=NULL, *av=NULL;
     volatile bool active;
+    double _ts[32];
+    char *_desc[32];
+    int _count, i;
+
     OPAL_TIMING_DECLARE(tm);
     OPAL_TIMING_INIT_EXT(&tm, OPAL_TIMING_GET_TIME_OF_DAY);
 
@@ -514,10 +518,15 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
 
 
     /* Setup RTE */
-    if (OMPI_SUCCESS != (ret = ompi_rte_init(NULL, NULL))) {
+    if (OMPI_SUCCESS != (ret = ompi_rte_init(NULL, NULL, _ts, _desc, &_count))) {
         error = "ompi_mpi_init: ompi_rte_init failed";
         goto error;
     }
+    for ( i=0; i<_count; i++ ) {
+      OSHTMNG_END1(_desc[i], _ts[i]);
+    }
+
+
     ompi_rte_initialized = true;
 
     OSHTMNG_END("ompi_rte_init");

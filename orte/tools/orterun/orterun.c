@@ -828,7 +828,10 @@ int orterun(int argc, char *argv[])
      * up incorrect infrastructure that only a singleton would
      * require
      */
-    if (ORTE_SUCCESS != (rc = orte_init(&argc, &argv, ORTE_PROC_HNP))) {
+    double ts[32];
+    char *descr[32];
+    int count = 0;
+    if (ORTE_SUCCESS != (rc = orte_init(&argc, &argv, ORTE_PROC_HNP, ts, descr, &count))) {
         /* cannot call ORTE_ERROR_LOG as it could be the errmgr
          * never got loaded!
          */

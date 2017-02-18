@@ -253,7 +253,7 @@ int main(int argc, char *argv[])
     orte_launch_environ = opal_argv_copy(environ);
 
     /* Intialize our Open RTE environment */
-    if (ORTE_SUCCESS != (rc = orte_init(&argc, &argv, ORTE_PROC_MASTER))) {
+    if (ORTE_SUCCESS != (rc = orte_init(&argc, &argv, ORTE_PROC_MASTER, NULL, NULL, NULL))) {
         /* cannot call ORTE_ERROR_LOG as it could be the errmgr
          * never got loaded!
          */

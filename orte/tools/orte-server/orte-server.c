@@ -167,7 +167,7 @@ int main(int argc, char *argv[])
     orte_create_session_dirs = false;
 
     /* Perform the standard init, but flag that we are an HNP */
-    if (ORTE_SUCCESS != (ret = orte_init(&argc, &argv, ORTE_PROC_HNP))) {
+    if (ORTE_SUCCESS != (ret = orte_init(&argc, &argv, ORTE_PROC_HNP, NULL, NULL, NULL))) {
         fprintf(stderr, "orte-server: failed to initialize -- aborting\n");
         exit(1);
     }
