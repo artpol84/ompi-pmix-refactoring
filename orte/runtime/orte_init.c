@@ -55,6 +55,8 @@
 #include "orte/runtime/orte_globals.h"
 #include "orte/runtime/orte_locks.h"
 
+#include "oshmem/runtime/timing.h"
+
 /**
  * Static functions used to configure the interactions between the OPAL and
  * the runtime.
@@ -129,10 +131,11 @@ orte_process_name_t orte_name_invalid = {ORTE_JOBID_INVALID, ORTE_VPID_INVALID};
 #endif
 const char orte_version_string[] = ORTE_IDENT_STRING;
 
-int orte_init(int* pargc, char*** pargv, orte_proc_type_t flags)
+int orte_init(int* pargc, char*** pargv, orte_proc_type_t flags, double ts[], char* desc[], int* count)
 {
     int ret;
     char *error = NULL;
+    double start;
 
     if (0 < orte_initialized) {
         /* track number of times we have been called */
@@ -151,11 +154,16 @@ int orte_init(int* pargc, char*** pargv, orte_proc_type_t flags)
     opal_snprintf_jobid = orte_util_snprintf_jobid;
     opal_convert_string_to_jobid = _convert_string_to_jobid;
 
+    *count = 0;
+    start = OSHTMNG_GET_TS();
     /* initialize the opal layer */
     if (ORTE_SUCCESS != (ret = opal_init(pargc, pargv))) {
         error = "opal_init";
         goto error;
     }
+    ts[(*count)] = OSHTMNG_GET_TS() - start;
+    desc[(*count)++] = "rte/opal_init";
+    start = OSHTMNG_GET_TS();
 
     /* ensure we know the type of proc for when we finalize */
     orte_process_info.proc_type = flags;
@@ -165,27 +173,47 @@ int orte_init(int* pargc, char*** pargv, orte_proc_type_t flags)
         error = "orte_locks_init";
         goto error;
     }
+    ts[(*count)] = OSHTMNG_GET_TS() - start;
+    desc[(*count)++] = "rte/locks_init";
+    start = OSHTMNG_GET_TS();
+
 
     /* Register all MCA Params */
     if (ORTE_SUCCESS != (ret = orte_register_params())) {
         error = "orte_register_params";
         goto error;
     }
+    ts[(*count)] = OSHTMNG_GET_TS() - start;
+    desc[(*count)++] = "rte/register_params";
+    start = OSHTMNG_GET_TS();
+
 
     /* setup the orte_show_help system */
     if (ORTE_SUCCESS != (ret = orte_show_help_init())) {
         error = "opal_output_init";
         goto error;
     }
+    ts[(*count)] = OSHTMNG_GET_TS() - start;
+    desc[(*count)++] = "rte/output_init";
+    start = OSHTMNG_GET_TS();
+
 
     /* register handler for errnum -> string conversion */
     opal_error_register("ORTE", ORTE_ERR_BASE, ORTE_ERR_MAX, orte_err2str);
+    ts[(*count)] = OSHTMNG_GET_TS() - start;
+    desc[(*count)++] = "rte/error_register";
+    start = OSHTMNG_GET_TS();
+
 
     /* Ensure the rest of the process info structure is initialized */
     if (ORTE_SUCCESS != (ret = orte_proc_info())) {
         error = "orte_proc_info";
         goto error;
     }
+    ts[(*count)] = OSHTMNG_GET_TS() - start;
+    desc[(*count)++] = "rte/proc_info";
+    start = OSHTMNG_GET_TS();
+
 
     /* we may have modified the local nodename according to
      * request to retain/strip the FQDN and prefix, so update
@@ -201,6 +229,10 @@ int orte_init(int* pargc, char*** pargv, orte_proc_type_t flags)
         /* let the pmix server register params */
         pmix_server_register_params();
     }
+    ts[(*count)] = OSHTMNG_GET_TS() - start;
+    desc[(*count)++] = "rte/register_params";
+    start = OSHTMNG_GET_TS();
+
 
     /* open the ESS and select the correct module for this environment */
     if (ORTE_SUCCESS != (ret = mca_base_framework_open(&orte_ess_base_framework, 0))) {
@@ -208,10 +240,18 @@ int orte_init(int* pargc, char*** pargv, orte_proc_type_t flags)
         error = "orte_ess_base_open";
         goto error;
     }
+    ts[(*count)] = OSHTMNG_GET_TS() - start;
+    desc[(*count)++] = "rte/ess_base_open";
+    start = OSHTMNG_GET_TS();
+
     if (ORTE_SUCCESS != (ret = orte_ess_base_select())) {
         error = "orte_ess_base_select";
         goto error;
     }
+    ts[(*count)] = OSHTMNG_GET_TS() - start;
+    desc[(*count)++] = "rte/ess_base_select";
+    start = OSHTMNG_GET_TS();
+
 
     if (!ORTE_PROC_IS_APP) {
         /* ORTE tools "block" in their own loop over the event
@@ -227,6 +267,10 @@ int orte_init(int* pargc, char*** pargv, orte_proc_type_t flags)
         error = "orte_ess_init";
         goto error;
     }
+    ts[(*count)] = OSHTMNG_GET_TS() - start;
+    desc[(*count)++] = "rte/ess_base_init";
+    start = OSHTMNG_GET_TS();
+
 
     /* set the remaining opal_process_info fields. Note that
      * the OPAL layer will have initialized these to NULL, and
@@ -251,6 +295,10 @@ int orte_init(int* pargc, char*** pargv, orte_proc_type_t flags)
             goto error;
         }
     }
+    ts[(*count)] = OSHTMNG_GET_TS() - start;
+    desc[(*count)++] = "rte/start_listening";
+    start = OSHTMNG_GET_TS();
+
 
     /* All done */
     return ORTE_SUCCESS;

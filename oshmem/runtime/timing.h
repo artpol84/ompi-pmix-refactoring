@@ -52,6 +52,23 @@ static inline double OSHTMNG_GET_TS(void)
     OSHTMNG_ts = OSHTMNG_GET_TS();                                \
 }
 
+#define OSHTMNG_END1(desc,ts) {                                   \
+    char *ptr = strrchr(__FILE__, '/');                           \
+    if( NULL == ptr ){                                            \
+        ptr = __FILE__;                                           \
+    } else {                                                      \
+        ptr++;                                                    \
+    }                                                             \
+    if( OSHTMNG_inum <= OSHTMNG_cnt ){                            \
+        printf("OSHTMNG [%s:%d %s]: interval count overflow!!\n", \
+            ptr, __LINE__, __FUNCTION__);                         \
+        abort();                                                  \
+    }                                                             \
+    OSHTMNG_in[OSHTMNG_cnt] = ts;                                 \
+    OSHTMNG_desc[OSHTMNG_cnt++] = desc;                           \
+}
+
+
 #define OSHTMNG_OUT {                                                   \
     int i, size, rank;                                                  \
     MPI_Comm_size(MPI_COMM_WORLD, &size);                               \

@@ -396,7 +396,7 @@ static int orte_ps_init(int argc, char *argv[]) {
     /***************************
      * We need all of OPAL and the TOOL portion of ORTE
      ***************************/
-    ret = orte_init(&argc, &argv, ORTE_PROC_TOOL);
+    ret = orte_init(&argc, &argv, ORTE_PROC_TOOL, NULL, NULL, NULL);
 
     return ret;
 }

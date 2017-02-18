@@ -267,7 +267,7 @@ main(int argc, char *argv[])
     /***************************
      * We need all of OPAL and the TOOL portion of ORTE
      ***************************/
-    if (ORTE_SUCCESS != orte_init(&argc, &argv, ORTE_PROC_TOOL)) {
+    if (ORTE_SUCCESS != orte_init(&argc, &argv, ORTE_PROC_TOOL, NULL, NULL, NULL)) {
         orte_finalize();
         return 1;
     }

@@ -131,7 +131,7 @@ main(int argc, char *argv[])
         return ret;
     }
 
-    if (ORTE_SUCCESS != (ret = orte_init(&argc, &argv, ORTE_PROC_TOOL))) {
+    if (ORTE_SUCCESS != (ret = orte_init(&argc, &argv, ORTE_PROC_TOOL, NULL, NULL, NULL))) {
         return ret;
     }
 
