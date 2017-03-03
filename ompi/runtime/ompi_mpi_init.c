@@ -391,7 +391,7 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
     OPAL_TIMING_DECLARE(tm);
     OPAL_TIMING_INIT_EXT(&tm, OPAL_TIMING_GET_TIME_OF_DAY);
 
-    OSHTMNG_INIT(32);
+    OSHTMNG_INIT(64);
     OSHTMNG_START;
 
     /* bitflag of the thread level support provided. To be used
@@ -553,6 +553,8 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
                                  OMPI_RTE_ERRHANDLER_LAST);
 
 
+    OSHTMNG_END("register_errhandler");
+
     /* determine the bitflag belonging to the threadlevel_support provided */
     memset ( &threadlevel_bf, 0, sizeof(uint8_t));
     OMPI_THREADLEVEL_SET_BITFLAG ( ompi_mpi_thread_provided, threadlevel_bf );
@@ -567,6 +569,8 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
     }
 #endif
 
+    OSHTMNG_END("thread_stuff");
+
     /* initialize datatypes. This step should be done early as it will
      * create the local convertor and local arch used in the proc
      * init.
@@ -576,11 +580,15 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
         goto error;
     }
 
+    OSHTMNG_END("datatype_init");
+
     /* Initialize OMPI procs */
     if (OMPI_SUCCESS != (ret = ompi_proc_init())) {
         error = "mca_proc_init() failed";
         goto error;
     }
+
+    OSHTMNG_END("proc_init");
 
     /* Initialize the op framework. This has to be done *after*
        ddt_init, but befor mca_coll_base_open, since some collective
@@ -590,16 +598,24 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
         error = "ompi_op_base_open() failed";
         goto error;
     }
+
+    OSHTMNG_END("base_framework_open");
+
     if (OMPI_SUCCESS !=
         (ret = ompi_op_base_find_available(OPAL_ENABLE_PROGRESS_THREADS,
                                            ompi_mpi_thread_multiple))) {
         error = "ompi_op_base_find_available() failed";
         goto error;
     }
+
+    OSHTMNG_END("op_base_find_avail");
+
     if (OMPI_SUCCESS != (ret = ompi_op_init())) {
         error = "ompi_op_init() failed";
         goto error;
     }
+
+    OSHTMNG_END("op_init");
 
     /* Open up MPI-related MCA components */
 
@@ -607,35 +623,57 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
         error = "mca_allocator_base_open() failed";
         goto error;
     }
+
+    OSHTMNG_END("alloc_base_open");
+
     if (OMPI_SUCCESS != (ret = mca_base_framework_open(&opal_rcache_base_framework, 0))) {
         error = "mca_rcache_base_open() failed";
         goto error;
     }
+
+    OSHTMNG_END("rcache_base_open");
+
     if (OMPI_SUCCESS != (ret = mca_base_framework_open(&opal_mpool_base_framework, 0))) {
         error = "mca_mpool_base_open() failed";
         goto error;
     }
+
+    OSHTMNG_END("mpool_base_open");
+
     if (OMPI_SUCCESS != (ret = mca_base_framework_open(&ompi_bml_base_framework, 0))) {
         error = "mca_bml_base_open() failed";
         goto error;
     }
+
+    OSHTMNG_END("bml_base_open");
+
     if (OMPI_SUCCESS != (ret = mca_bml_base_init (1, ompi_mpi_thread_multiple))) {
         error = "mca_bml_base_init() failed";
         goto error;
     }
+
+    OSHTMNG_END("bml_base_init");
+
     if (OMPI_SUCCESS != (ret = mca_base_framework_open(&ompi_pml_base_framework, 0))) {
         error = "mca_pml_base_open() failed";
         goto error;
     }
+
+    OSHTMNG_END("pml_base_open");
+
     if (OMPI_SUCCESS != (ret = mca_base_framework_open(&ompi_coll_base_framework, 0))) {
         error = "mca_coll_base_open() failed";
         goto error;
     }
 
+    OSHTMNG_END("coll_base_open");
+
     if (OMPI_SUCCESS != (ret = mca_base_framework_open(&ompi_osc_base_framework, 0))) {
         error = "ompi_osc_base_open() failed";
         goto error;
     }
+
+    OSHTMNG_END("osc_base_open");
 
     /* In order to reduce the common case for MPI apps (where they
        don't use MPI-2 IO or MPI-1 topology functions), the io and
@@ -651,6 +689,9 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
         error = "mca_pml_base_select() failed";
         goto error;
     }
+
+    OSHTMNG_END("pml_base_select");
+
 
     /* check for timing request - get stop time and report elapsed time if so */
     OPAL_TIMING_MNEXT((&tm,"time to execute modex"));
