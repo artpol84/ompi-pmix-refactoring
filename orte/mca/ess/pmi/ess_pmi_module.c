@@ -80,6 +80,8 @@ static bool progress_thread_running = false;
 
 /****    MODULE FUNCTIONS    ****/
 
+#include "oshmem/runtime/timing.h"
+
 static int rte_init(void)
 {
     int ret;
@@ -96,16 +98,22 @@ static int rte_init(void)
     opal_process_name_t name;
     size_t i;
 
+    OSHTMNG_ENV_t env_prof = OSHTMNG_ENV_START("OSHTMNG_ESS_PMI");
+    
     /* run the prolog */
     if (ORTE_SUCCESS != (ret = orte_ess_base_std_prolog())) {
         error = "orte_ess_base_std_prolog";
         goto error;
     }
+    
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_pmi/ess_std_prolog");
 
     /* get an async event base - we use the opal_async one so
      * we don't startup extra threads if not needed */
     orte_event_base = opal_progress_thread_init(NULL);
     progress_thread_running = true;
+
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_pmi/progress_thread");
 
     /* open and setup pmix */
     if (OPAL_SUCCESS != (ret = mca_base_framework_open(&opal_pmix_base_framework, 0))) {
@@ -114,19 +122,32 @@ static int rte_init(void)
         error = "pmix init";
         goto error;
     }
+
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_pmi/pmix_open");
+
+
     if (OPAL_SUCCESS != (ret = opal_pmix_base_select())) {
         /* we cannot run */
         error = "pmix init";
         goto error;
     }
+
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_pmi/pmix_select");
+
     /* set the event base */
     opal_pmix_base_set_evbase(orte_event_base);
+
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_pmi/pmix_set_evbase");
+
     /* initialize the selected module */
     if (!opal_pmix.initialized() && (OPAL_SUCCESS != (ret = opal_pmix.init()))) {
         /* we cannot run */
         error = "pmix init";
         goto error;
     }
+
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_pmi/opal_pmix.init()");
+
     u32ptr = &u32;
     u16ptr = &u16;
 
@@ -171,6 +192,7 @@ static int rte_init(void)
         goto error;
     }
     orte_process_info.num_procs = u32;
+
 
     /* push into the environ for pickup in MPI layer for
      * MPI-3 required info key
@@ -226,6 +248,8 @@ static int rte_init(void)
         /* cannot free the envar as that messes up our environ */
         free(string_key);
     }
+
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_pmi/get_jobinfo_data");
 
     /* retrieve our topology */
     val = NULL;
@@ -296,6 +320,8 @@ static int rte_init(void)
         OBJ_RELEASE(kv);
     }
 
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_pmi/topology");
+
     /* get our local peers */
     if (0 < orte_process_info.num_local_peers) {
         /* if my local rank if too high, then that's an error */
@@ -326,6 +352,8 @@ static int rte_init(void)
         peers = NULL;
         cpusets = NULL;
     }
+
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_pmi/local_peers");
 
     /* set the locality */
     if (NULL != peers) {
@@ -370,6 +398,8 @@ static int rte_init(void)
         opal_argv_free(cpusets);
     }
 
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_pmi/binding");
+
     /* now that we have all required info, complete the setup */
     if (ORTE_SUCCESS != (ret = orte_ess_base_app_setup(false))) {
         ORTE_ERROR_LOG(ret);
@@ -377,11 +407,15 @@ static int rte_init(void)
         goto error;
     }
 
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_pmi/app_setup");
+
     /* setup process binding */
     if (ORTE_SUCCESS != (ret = orte_ess_base_proc_binding())) {
         error = "proc_binding";
         goto error;
     }
+
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_pmi/proc_binding");
 
     /* this needs to be set to enable debugger use when direct launched */
     if (NULL == orte_process_info.my_daemon_uri) {
@@ -405,12 +439,16 @@ static int rte_init(void)
     }
     free(rmluri);
 
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_pmi/OPAL_PMIX_PROC_URI");
+
     /* push our hostname so others can find us, if they need to */
     OPAL_MODEX_SEND_VALUE(ret, OPAL_PMIX_GLOBAL, OPAL_PMIX_HOSTNAME, orte_process_info.nodename, OPAL_STRING);
     if (ORTE_SUCCESS != ret) {
         error = "db store hostname";
         goto error;
     }
+
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_pmi/OPAL_PMIX_HOSTNAME");
 
     /* if we are an ORTE app - and not an MPI app - then
      * we need to exchange our connection info here.
@@ -425,6 +463,8 @@ static int rte_init(void)
     if (ORTE_PROC_IS_NON_MPI && !orte_do_not_barrier) {
         opal_pmix.fence(NULL, 0);
     }
+
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_pmi/done");
 
     return ORTE_SUCCESS;
 

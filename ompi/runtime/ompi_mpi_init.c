@@ -391,7 +391,7 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
     OPAL_TIMING_DECLARE(tm);
     OPAL_TIMING_INIT_EXT(&tm, OPAL_TIMING_GET_TIME_OF_DAY);
 
-    OSHTMNG_INIT(64);
+    OSHTMNG_INIT(512);
     OSHTMNG_START;
 
     /* bitflag of the thread level support provided. To be used
@@ -522,10 +522,13 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
         error = "ompi_mpi_init: ompi_rte_init failed";
         goto error;
     }
+    
     for ( i=0; i<_count; i++ ) {
-      OSHTMNG_END1(_desc[i], _ts[i]);
+        OSHTMNG_END1(_desc[i], _ts[i]);
     }
 
+    OSHTMNG_ENV_APPEND("OSHTMNG_ESS_BASE_APP");
+    OSHTMNG_ENV_APPEND("OSHTMNG_ESS_PMI");
 
     ompi_rte_initialized = true;
 
@@ -660,6 +663,24 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
     }
 
     OSHTMNG_END("pml_base_open");
+
+/*
+{
+    char *ptr = getenv("MY_UCP_CNT"), *desc;
+    _count = atoi(ptr);
+    for ( i=0; i < _count; i++ ) {
+	char vname[256];
+	double ts;
+        sprintf(vname, "MY_UCP_INT_%d_DESC", i);
+	desc = getenv(vname);
+	
+        sprintf(vname, "MY_UCP_INT_%d_VAL",i);
+	ptr = getenv(vname);
+	sscanf(ptr,"%lf", &ts);
+        OSHTMNG_END1(desc, ts);
+    }
+}
+*/
 
     if (OMPI_SUCCESS != (ret = mca_base_framework_open(&ompi_coll_base_framework, 0))) {
         error = "mca_coll_base_open() failed";
