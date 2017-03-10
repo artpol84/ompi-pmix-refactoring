@@ -68,11 +68,16 @@
 
 #include "orte/mca/ess/base/base.h"
 
+#include "oshmem/runtime/timing.h"
+
+
 int orte_ess_base_app_setup(bool db_restrict_local)
 {
     int ret;
     char *error = NULL;
     opal_value_t kv;
+    
+    OSHTMNG_ENV_t env_prof = OSHTMNG_ENV_START("OSHTMNG_ESS_BASE_APP");
 
     /*
      * stdout/stderr buffering
@@ -93,6 +98,8 @@ int orte_ess_base_app_setup(bool db_restrict_local)
             setvbuf(stderr, NULL, _IOFBF, 0);
         }
     }
+    
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_app/std_buffering");
 
     /* if I am an MPI app, we will let the MPI layer define and
      * control the opal_proc_t structure. Otherwise, we need to
@@ -105,17 +112,24 @@ int orte_ess_base_app_setup(bool db_restrict_local)
         opal_proc_local_set(&orte_process_info.super);
     }
 
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_app/ORTE_PROC_NON_MPI");
+
     /* open and setup the state machine */
     if (ORTE_SUCCESS != (ret = mca_base_framework_open(&orte_state_base_framework, 0))) {
         ORTE_ERROR_LOG(ret);
         error = "orte_state_base_open";
         goto error;
     }
+
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_app/state_open");
+
     if (ORTE_SUCCESS != (ret = orte_state_base_select())) {
         ORTE_ERROR_LOG(ret);
         error = "orte_state_base_select";
         goto error;
     }
+
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_app/state_select");
 
     /* open the errmgr */
     if (ORTE_SUCCESS != (ret = mca_base_framework_open(&orte_errmgr_base_framework, 0))) {
@@ -123,6 +137,8 @@ int orte_ess_base_app_setup(bool db_restrict_local)
         error = "orte_errmgr_base_open";
         goto error;
     }
+
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_app/errmgr_open");
 
     /* setup my session directory */
     if (orte_create_session_dirs) {
@@ -170,6 +186,9 @@ int orte_ess_base_app_setup(bool db_restrict_local)
         }
         OBJ_DESTRUCT(&kv);
     }
+    
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_app/session_dirs");
+
     /* Setup the communication infrastructure */
     /*
      * OOB Layer
@@ -179,39 +198,60 @@ int orte_ess_base_app_setup(bool db_restrict_local)
         error = "orte_oob_base_open";
         goto error;
     }
+
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_app/oob_open");
+
     if (ORTE_SUCCESS != (ret = orte_oob_base_select())) {
         ORTE_ERROR_LOG(ret);
         error = "orte_oob_base_select";
         goto error;
     }
+
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_app/oob_select");
+
     /* Runtime Messaging Layer */
     if (ORTE_SUCCESS != (ret = mca_base_framework_open(&orte_rml_base_framework, 0))) {
         ORTE_ERROR_LOG(ret);
         error = "orte_rml_base_open";
         goto error;
     }
+
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_app/rml_open");
+
     if (ORTE_SUCCESS != (ret = orte_rml_base_select())) {
         ORTE_ERROR_LOG(ret);
         error = "orte_rml_base_select";
         goto error;
     }
+
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_app/rml_select");
+
     /* setup the errmgr */
     if (ORTE_SUCCESS != (ret = orte_errmgr_base_select())) {
         ORTE_ERROR_LOG(ret);
         error = "orte_errmgr_base_select";
         goto error;
     }
+
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_app/errmgr_select");
+
     /* Routed system */
     if (ORTE_SUCCESS != (ret = mca_base_framework_open(&orte_routed_base_framework, 0))) {
         ORTE_ERROR_LOG(ret);
         error = "orte_routed_base_open";
         goto error;
     }
+
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_app/routed_open");
+
     if (ORTE_SUCCESS != (ret = orte_routed_base_select())) {
         ORTE_ERROR_LOG(ret);
         error = "orte_routed_base_select";
         goto error;
     }
+
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_app/routed_select");
+
     /*
      * Group communications
      */
@@ -220,34 +260,51 @@ int orte_ess_base_app_setup(bool db_restrict_local)
         error = "orte_grpcomm_base_open";
         goto error;
     }
+
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_app/grpcomm_open");
+
     if (ORTE_SUCCESS != (ret = orte_grpcomm_base_select())) {
         ORTE_ERROR_LOG(ret);
         error = "orte_grpcomm_base_select";
         goto error;
     }
+
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_app/grpcomm_select");
+
     /* enable communication via the rml */
     if (ORTE_SUCCESS != (ret = orte_rml.enable_comm())) {
         ORTE_ERROR_LOG(ret);
         error = "orte_rml.enable_comm";
         goto error;
     }
+
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_app/orte_rml.enable_comm");
+
     /* setup the routed info  */
     if (ORTE_SUCCESS != (ret = orte_routed.init_routes(ORTE_PROC_MY_NAME->jobid, NULL))) {
         ORTE_ERROR_LOG(ret);
         error = "orte_routed.init_routes";
         goto error;
     }
+
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_app/orte_routed.init_routes");
+
     /* open the distributed file system */
     if (ORTE_SUCCESS != (ret = mca_base_framework_open(&orte_dfs_base_framework, 0))) {
         ORTE_ERROR_LOG(ret);
         error = "orte_dfs_base_open";
         goto error;
     }
+    
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_app/dfs_open");
+
     if (ORTE_SUCCESS != (ret = orte_dfs_base_select())) {
         ORTE_ERROR_LOG(ret);
         error = "orte_dfs_base_select";
         goto error;
     }
+
+    OSHTMNG_ENV_NEXT(&env_prof, "ess_app/dfs_select");
 
     return ORTE_SUCCESS;
 
