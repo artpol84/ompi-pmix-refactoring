@@ -94,6 +94,9 @@ static int mca_scoll_mpi_module_enable(mca_scoll_base_module_t *module,
  * Look at the communicator and decide which set of functions and
  * priority we want to return.
  */
+
+#include "oshmem/runtime/timing.h"
+
 mca_scoll_base_module_t *
 mca_scoll_mpi_comm_query(oshmem_group_t *osh_group, int *priority)
 {
@@ -113,19 +116,28 @@ mca_scoll_mpi_comm_query(oshmem_group_t *osh_group, int *priority)
     if ((osh_group->proc_count < 2) || (osh_group->proc_count < cm->mpi_np)) {
         return NULL;
     }
+
+
+    OSHTMNG_INIT(16);
+    OSHTMNG_START;
+
     /* Create OMPI_Comm object and store ptr to it in group obj*/
     if (NULL == oshmem_group_all) {
         osh_group->ompi_comm = &(ompi_mpi_comm_world.comm);
+        OSHTMNG_END("ompi_mpi_comm_world");
     } else {
         err = ompi_comm_group(&(ompi_mpi_comm_world.comm), &parent_group);
         if (OPAL_UNLIKELY(OMPI_SUCCESS != err)) {
             return NULL;
         }
+        OSHTMNG_END("ompi_comm_group");
         ranks = (int*) malloc(osh_group->proc_count * sizeof(int));
         if (OPAL_UNLIKELY(NULL == ranks)) {
             return NULL;
         }
         tag = 1;
+
+        OSHTMNG_END("malloc");
 
         for (i = 0; i < osh_group->proc_count; i++) {
             ompi_proc_t* ompi_proc;
@@ -138,24 +150,32 @@ mca_scoll_mpi_comm_query(oshmem_group_t *osh_group, int *priority)
             }
         }
 
+        OSHTMNG_END("build_ranks");
+
         err = ompi_group_incl(parent_group, osh_group->proc_count, ranks, &new_group);
         if (OPAL_UNLIKELY(OMPI_SUCCESS != err)) {
             free(ranks);
             return NULL;
         }
+        OSHTMNG_END("ompi_group_incl");
+
         err = ompi_comm_create_group(&(ompi_mpi_comm_world.comm), new_group, tag, &newcomm);
         if (OPAL_UNLIKELY(OMPI_SUCCESS != err)) {
             free(ranks);
             return NULL;
         }
+        OSHTMNG_END("ompi_comm_create_group");
+
         err = ompi_group_free(&new_group);
         if (OPAL_UNLIKELY(OMPI_SUCCESS != err)) {
             free(ranks);
             return NULL;
         }
+        OSHTMNG_END("ompi_group_free");
 
         free(ranks);
         osh_group->ompi_comm = newcomm;
+        OSHTMNG_END("set_group_comm");
     }
     mpi_module = OBJ_NEW(mca_scoll_mpi_module_t);
     if (!mpi_module){
@@ -172,6 +192,10 @@ mca_scoll_mpi_comm_query(oshmem_group_t *osh_group, int *priority)
 
     *priority = cm->mpi_priority;
     module = &mpi_module->super;
+
+    OSHTMNG_END("finish_setup");
+
+    OSHTMNG_OUT;
 
     return module;
 }

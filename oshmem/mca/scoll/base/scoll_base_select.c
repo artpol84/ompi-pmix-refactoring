@@ -187,11 +187,16 @@ int mca_scoll_base_group_unselect(struct oshmem_group_t * group)
  * group.  It is used to select which coll component will be
  * active for a given group.
  */
+#include "oshmem/runtime/timing.h"
+
 int mca_scoll_base_select(struct oshmem_group_t *group)
 {
     opal_list_t *selectable;
     opal_list_item_t *item;
     int ret;
+
+    OSHTMNG_INIT(16);
+    OSHTMNG_START;
 
     /* Announce */
     SCOLL_VERBOSE(10, "scoll:base:group_select: new group: %d", group->id);
@@ -205,6 +210,10 @@ int mca_scoll_base_select(struct oshmem_group_t *group)
         group->g_scoll.scoll_alltoall = scoll_null_alltoall;
         return OSHMEM_SUCCESS;
     }
+
+    OSHTMNG_END("setup");
+
+
     SCOLL_VERBOSE(10,
                   "scoll:base:group_select: Checking all available modules");
     selectable = check_components(&oshmem_scoll_base_framework.framework_components, group);
@@ -216,6 +225,8 @@ int mca_scoll_base_select(struct oshmem_group_t *group)
         /* There's no modules available */
         return OSHMEM_ERROR;
     }
+
+    OSHTMNG_END("check_components");
 
     /* do the selection loop */
     for (item = opal_list_remove_first(selectable); NULL != item; item =
@@ -235,6 +246,8 @@ int mca_scoll_base_select(struct oshmem_group_t *group)
         OBJ_RELEASE(avail);
     }
 
+    OSHTMNG_END("select_loop");
+
     /* Done with the list from the check_components() call so release it. */
     OBJ_RELEASE(selectable);
     if ((NULL == group->g_scoll.scoll_barrier)
@@ -245,6 +258,9 @@ int mca_scoll_base_select(struct oshmem_group_t *group)
         mca_scoll_base_group_unselect(group);
         return OSHMEM_ERR_NOT_FOUND;
     }
+
+    OSHTMNG_END("release");
+    OSHTMNG_OUT;
 
     return OSHMEM_SUCCESS;
 }
