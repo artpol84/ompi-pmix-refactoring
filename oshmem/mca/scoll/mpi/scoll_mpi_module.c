@@ -164,6 +164,8 @@ mca_scoll_mpi_comm_query(oshmem_group_t *osh_group, int *priority)
             free(ranks);
             return NULL;
         }
+        /* if communicator profiling is enabled - we can see it here */
+        OSHTMNG_ENV_APPEND("OSHTMNG_COMM_GROUP");
         OSHTMNG_END("ompi_comm_create_group");
 
         err = ompi_group_free(&new_group);

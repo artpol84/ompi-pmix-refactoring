@@ -160,8 +160,10 @@ int oshmem_shmem_init(int argc, char **argv, int requested, int *provided)
         if (OSHMEM_SUCCESS != ret) {
             return ret;
         }
-
         PMPI_Comm_dup(MPI_COMM_WORLD, &oshmem_comm_world);
+
+        /* if communicator profiling is enabled - we can see it here */
+        OSHTMNG_ENV_APPEND("OSHTMNG_COMM_DUP");
         OSHTMNG_END("PMPI_Comm_dup");
         
         ret = _shmem_init(argc, argv, requested, provided);
