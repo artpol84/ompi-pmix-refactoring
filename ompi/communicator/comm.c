@@ -51,6 +51,8 @@
 #include "ompi/mca/pml/pml.h"
 #include "ompi/request/request.h"
 
+#include "oshmem/runtime/timing.h"
+
 /*
 ** sort-function for MPI_Comm_split
 */
@@ -978,6 +980,8 @@ int ompi_comm_dup_with_info ( ompi_communicator_t * comm, ompi_info_t *info, omp
     ompi_group_t *remote_group = NULL;
     int mode = OMPI_COMM_CID_INTRA, rc = OMPI_SUCCESS;
 
+    OSHTMNG_ENV_t env_prof = OSHTMNG_ENV_START("OSHTMNG_COMM_DUP");
+    
     if ( OMPI_COMM_IS_INTER ( comm ) ){
         mode   = OMPI_COMM_CID_INTER;
         remote_group = comm->c_remote_group;
@@ -1003,12 +1007,14 @@ int ompi_comm_dup_with_info ( ompi_communicator_t * comm, ompi_info_t *info, omp
     if ( MPI_SUCCESS != rc) {
         return rc;
     }
-
+    OSHTMNG_ENV_NEXT(&env_prof, "comm_dup/setup");
     /* Determine context id. It is identical to f_2_c_handle */
     rc = ompi_comm_nextcid (newcomp, comm, NULL, NULL, NULL, false, mode);
     if ( OMPI_SUCCESS != rc ) {
         return rc;
     }
+
+    OSHTMNG_ENV_NEXT(&env_prof, "comm_dup/nextcid");
 
     /* Set name for debugging purposes */
     snprintf(newcomp->c_name, MPI_MAX_OBJECT_NAME, "MPI COMMUNICATOR %d DUP FROM %d",
@@ -1019,6 +1025,7 @@ int ompi_comm_dup_with_info ( ompi_communicator_t * comm, ompi_info_t *info, omp
     if ( OMPI_SUCCESS != rc ) {
         return rc;
     }
+    OSHTMNG_ENV_NEXT(&env_prof, "comm_dup/activate");
 
     *newcomm = newcomp;
     return MPI_SUCCESS;
@@ -1175,6 +1182,8 @@ int ompi_comm_create_group (ompi_communicator_t *comm, ompi_group_t *group, int 
     int mode = OMPI_COMM_CID_GROUP, rc = OMPI_SUCCESS;
 
     *newcomm = MPI_COMM_NULL;
+    
+    OSHTMNG_ENV_t env_prof = OSHTMNG_ENV_START("OSHTMNG_COMM_GROUP");
 
     rc =  ompi_comm_set ( &newcomp,                               /* new comm */
                           comm,                                   /* old comm */
@@ -1195,12 +1204,13 @@ int ompi_comm_create_group (ompi_communicator_t *comm, ompi_group_t *group, int 
         return rc;
     }
 
+    OSHTMNG_ENV_NEXT(&env_prof, "create_group/set");
     /* Determine context id. It is identical to f_2_c_handle */
     rc = ompi_comm_nextcid (newcomp, comm, NULL, &tag, NULL, false, mode);
     if ( OMPI_SUCCESS != rc ) {
         return rc;
     }
-
+    OSHTMNG_ENV_NEXT(&env_prof, "create_group/nextcid");
     /* Set name for debugging purposes */
     snprintf(newcomp->c_name, MPI_MAX_OBJECT_NAME, "MPI COMMUNICATOR %d GROUP FROM %d",
              newcomp->c_contextid, comm->c_contextid );
@@ -1210,7 +1220,7 @@ int ompi_comm_create_group (ompi_communicator_t *comm, ompi_group_t *group, int 
     if ( OMPI_SUCCESS != rc ) {
         return rc;
     }
-
+    OSHTMNG_ENV_NEXT(&env_prof, "create_group/activate");
     *newcomm = newcomp;
     return MPI_SUCCESS;
 }
