@@ -53,10 +53,15 @@ static void scoll_base_module_construct(mca_scoll_base_module_t *m)
 OBJ_CLASS_INSTANCE(mca_scoll_base_module_t, opal_object_t,
                    scoll_base_module_construct, NULL);
 
+#include "oshmem/runtime/timing.h"
+
 int mca_scoll_enable(void)
 {
     int ret = OSHMEM_SUCCESS;
 
+    OSHTMNG_INIT(16);
+    OSHTMNG_START;
+        
     if (!mca_scoll_sync_array) {
         void* ptr = (void*) mca_scoll_sync_array;
         int i = 0;
@@ -69,16 +74,20 @@ int mca_scoll_enable(void)
         }
     }
 
+    OSHTMNG_END("memheap");
+
     /* Note: it is done to support FCA only and we need to consider possibility to
      * find a way w/o this ugly hack
      */
     if (OSHMEM_SUCCESS != (ret = mca_scoll_base_select(oshmem_group_all))) {
         return ret;
     }
+    OSHTMNG_END("group_all");
     if (OSHMEM_SUCCESS != (ret = mca_scoll_base_select(oshmem_group_self))) {
         return ret;
     }
-
+    OSHTMNG_END("group_self");
+    OSHTMNG_OUT;
     return OSHMEM_SUCCESS;
 }
 
