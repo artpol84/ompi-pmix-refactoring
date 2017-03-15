@@ -346,6 +346,8 @@ int ompi_proc_complete_init(void)
         }
     }
 
+    opal_mutex_unlock (&ompi_proc_lock);
+
     /* if cutoff is larger than # of procs - add all processes
      * NOTE that local procs will be automatically skipped as they
      * are already in the hash table
@@ -367,6 +369,8 @@ int ompi_proc_complete_init(void)
         opal_mutex_lock (&ompi_proc_lock);
     }
 
+    /* TODO: do we need to lock here ? */
+    opal_mutex_lock (&ompi_proc_lock);
     opal_list_sort (&ompi_proc_list, ompi_proc_compare_vid);
     opal_mutex_unlock (&ompi_proc_lock);
 
