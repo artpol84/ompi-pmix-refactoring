@@ -668,6 +668,14 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
     opal_pmix.commit();
     OMPI_TIMING_NEXT("commit");
 
+    opal_pmix.fence(NULL, false);
+
+    OMPI_TIMING_NEXT("Sync-barrier#1");
+
+    opal_pmix.fence(NULL, false);
+
+    OMPI_TIMING_NEXT("Sync-barrier#2");
+
     /* If we have a non-blocking fence:
      * if we are doing an async modex, but we are collecting all
      * data, then execute the non-blocking modex in the background.
