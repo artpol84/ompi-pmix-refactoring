@@ -620,19 +620,29 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
         error = "mca_bml_base_init() failed";
         goto error;
     }
+
+    OMPI_TIMING_NEXT("pre-PML");
+
     if (OMPI_SUCCESS != (ret = mca_base_framework_open(&ompi_pml_base_framework, 0))) {
         error = "mca_pml_base_open() failed";
         goto error;
     }
+
+    OMPI_TIMING_NEXT("PML");
+
     if (OMPI_SUCCESS != (ret = mca_base_framework_open(&ompi_coll_base_framework, 0))) {
         error = "mca_coll_base_open() failed";
         goto error;
     }
 
+    OMPI_TIMING_NEXT("Coll");
+
     if (OMPI_SUCCESS != (ret = mca_base_framework_open(&ompi_osc_base_framework, 0))) {
         error = "ompi_osc_base_open() failed";
         goto error;
     }
+
+    OMPI_TIMING_NEXT("OSC");
 
 #if OPAL_ENABLE_FT_CR == 1
     if (OMPI_SUCCESS != (ret = mca_base_framework_open(&ompi_crcp_base_framework, 0))) {
@@ -656,6 +666,8 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
         goto error;
     }
 
+    OMPI_TIMING_NEXT("OPAL_ENABLE_PROGRESS_THREADS");
+
     OMPI_TIMING_IMPORT_OPAL("orte_init");
     OMPI_TIMING_IMPORT_OPAL("opal_init_util");
     OMPI_TIMING_NEXT("rte_init-commit");
@@ -675,6 +687,10 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
     opal_pmix.fence(NULL, false);
 
     OMPI_TIMING_NEXT("Sync-barrier#2");
+
+    opal_pmix.fence(NULL, false);
+
+    OMPI_TIMING_NEXT("Sync-barrier#3");
 
     /* If we have a non-blocking fence:
      * if we are doing an async modex, but we are collecting all
@@ -717,6 +733,8 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
         goto error;
     }
 
+    OMPI_TIMING_NEXT("bsend");
+
     if (OMPI_SUCCESS !=
         (ret = mca_coll_base_find_available(OPAL_ENABLE_PROGRESS_THREADS,
                                             ompi_mpi_thread_multiple))) {
@@ -724,12 +742,16 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
         goto error;
     }
 
+    OMPI_TIMING_NEXT("coll_find");
+
     if (OMPI_SUCCESS !=
         (ret = ompi_osc_base_find_available(OPAL_ENABLE_PROGRESS_THREADS,
                                             ompi_mpi_thread_multiple))) {
         error = "ompi_osc_base_find_available() failed";
         goto error;
     }
+
+    OMPI_TIMING_NEXT("osc_find");
 
 #if OPAL_ENABLE_FT_CR == 1
     if (OMPI_SUCCESS != (ret = ompi_crcp_base_select() ) ) {
@@ -748,6 +770,8 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
         goto error;
     }
 
+    OMPI_TIMING_NEXT("req_init");
+
     if (OMPI_SUCCESS != (ret = ompi_message_init())) {
         error = "ompi_message_init() failed";
         goto error;
@@ -759,11 +783,15 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
         goto error;
     }
 
+    OMPI_TIMING_NEXT("mpiinfo");
+
     /* initialize error handlers */
     if (OMPI_SUCCESS != (ret = ompi_errhandler_init())) {
         error = "ompi_errhandler_init() failed";
         goto error;
     }
+
+    OMPI_TIMING_NEXT("errhndl");
 
     /* initialize error codes */
     if (OMPI_SUCCESS != (ret = ompi_mpi_errcode_init())) {
@@ -771,11 +799,14 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
         goto error;
     }
 
+
     /* initialize internal error codes */
     if (OMPI_SUCCESS != (ret = ompi_errcode_intern_init())) {
         error = "ompi_errcode_intern_init() failed";
         goto error;
     }
+
+    OMPI_TIMING_NEXT("errcode");
 
     /* initialize groups  */
     if (OMPI_SUCCESS != (ret = ompi_group_init())) {
@@ -783,11 +814,15 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
         goto error;
     }
 
+    OMPI_TIMING_NEXT("grp");
+
     /* initialize communicators */
     if (OMPI_SUCCESS != (ret = ompi_comm_init())) {
         error = "ompi_comm_init() failed";
         goto error;
     }
+
+    OMPI_TIMING_NEXT("comm");
 
     /* initialize file handles */
     if (OMPI_SUCCESS != (ret = ompi_file_init())) {
@@ -795,17 +830,23 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
         goto error;
     }
 
+    OMPI_TIMING_NEXT("file");
+
     /* initialize windows */
     if (OMPI_SUCCESS != (ret = ompi_win_init())) {
         error = "ompi_win_init() failed";
         goto error;
     }
 
+    OMPI_TIMING_NEXT("win");
+
     /* initialize attribute meta-data structure for comm/win/dtype */
     if (OMPI_SUCCESS != (ret = ompi_attr_init())) {
         error = "ompi_attr_init() failed";
         goto error;
     }
+
+    OMPI_TIMING_NEXT("attr");
 
     /* identify the architectures of remote procs and setup
      * their datatype convertors, if required
@@ -815,12 +856,23 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
         goto error;
     }
 
+    OMPI_TIMING_NEXT("proc_compl");
+
     /* start PML/BTL's */
     ret = MCA_PML_CALL(enable(true));
     if( OMPI_SUCCESS != ret ) {
         error = "PML control failed";
         goto error;
     }
+
+    OMPI_TIMING_NEXT("pml_en");
+
+{
+    volatile int delay = 0;
+    while(delay){
+	sleep(1);
+    }
+}
 
     /* some btls/mtls require we call add_procs with all procs in the job.
      * since the btls/mtls have no visibility here it is up to the pml to
@@ -840,6 +892,10 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
     }
     ret = MCA_PML_CALL(add_procs(procs, nprocs));
     free(procs);
+
+    OMPI_TIMING_NEXT("add_proc");
+//    OMPI_TIMING_IMPORT_OPAL("mca_pml_ucx_add_procs");
+
     /* If we got "unreachable", then print a specific error message.
        Otherwise, if we got some other failure, fall through to print
        a generic message. */
@@ -855,6 +911,8 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
 
     MCA_PML_CALL(add_comm(&ompi_mpi_comm_world.comm));
     MCA_PML_CALL(add_comm(&ompi_mpi_comm_self.comm));
+
+    OMPI_TIMING_NEXT("add_comm");
 
     /*
      * Dump all MCA parameters if requested

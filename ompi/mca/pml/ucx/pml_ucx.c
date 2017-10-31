@@ -17,6 +17,7 @@
 #include "ompi/message/message.h"
 #include "ompi/mca/pml/base/pml_base_bsend.h"
 #include "pml_ucx_request.h"
+#include "opal/util/timings.h"
 
 #include <inttypes.h>
 
@@ -317,6 +318,8 @@ int mca_pml_ucx_add_procs(struct ompi_proc_t **procs, size_t nprocs)
     ucp_ep_h ep;
     size_t i;
     int ret;
+    
+    OPAL_TIMING_ENV_INIT(tmng);
 
     if (OMPI_SUCCESS != (ret = mca_pml_base_pml_check_selected("ucx",
                                                               procs,
@@ -324,10 +327,14 @@ int mca_pml_ucx_add_procs(struct ompi_proc_t **procs, size_t nprocs)
         return ret;
     }
 
+    OPAL_TIMING_ENV_NEXT(tmng, "check_selected");
+
     for (i = 0; i < nprocs; ++i) {
         proc = procs[(i + OMPI_PROC_MY_NAME->vpid) % nprocs];
 
         ret = mca_pml_ucx_recv_worker_address(proc, &address, &addrlen);
+
+        OPAL_TIMING_ENV_NEXT(tmng, "worker_address:%d",i);
         if (ret < 0) {
             PML_UCX_ERROR("Failed to receive worker address from proc: %d",
                           proc->super.proc_name.vpid);
@@ -344,8 +351,12 @@ int mca_pml_ucx_add_procs(struct ompi_proc_t **procs, size_t nprocs)
         ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
         ep_params.address    = address;
 
+        OPAL_TIMING_ENV_NEXT(tmng, "assignments:%d",i);
+
         status = ucp_ep_create(ompi_pml_ucx.ucp_worker, &ep_params, &ep);
         free(address);
+
+        OPAL_TIMING_ENV_NEXT(tmng, "ep_create:%d",i);
 
         if (UCS_OK != status) {
             PML_UCX_ERROR("Failed to connect to proc: %d, %s", proc->super.proc_name.vpid,
@@ -354,6 +365,8 @@ int mca_pml_ucx_add_procs(struct ompi_proc_t **procs, size_t nprocs)
         }
 
         proc->proc_endpoints[OMPI_PROC_ENDPOINT_TAG_PML] = ep;
+
+        OPAL_TIMING_ENV_NEXT(tmng, "done:%d",i);
     }
 
     return OMPI_SUCCESS;

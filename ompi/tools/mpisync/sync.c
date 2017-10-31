@@ -8,8 +8,6 @@
  * $HEADER$
  */
 
-#include "opal_config.h"
-
 #include <stdio.h>
 #include <mpi.h>
 #include <unistd.h>
@@ -20,6 +18,8 @@
 
 #include "hpctimer.h"
 #include "mpigclock.h"
+
+#define OPAL_MAXHOSTNAMELEN 1024
 
 typedef enum { Gen, Chk } prog_mode_t;
 
