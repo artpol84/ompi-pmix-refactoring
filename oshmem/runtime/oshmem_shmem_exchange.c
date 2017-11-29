@@ -15,6 +15,7 @@
 #include "oshmem/constants.h"
 #include "oshmem/runtime/runtime.h"
 #include "oshmem/runtime/params.h"
+#include "opal/mca/pmix/pmix.h"
 
 int oshmem_shmem_allgather(void *send_buf, void *rcv_buf, int elem_size)
 {
@@ -40,4 +41,9 @@ int oshmem_shmem_allgatherv(void *send_buf, void* rcv_buf, int send_count,
 void oshmem_shmem_barrier(void)
 {
     PMPI_Barrier(oshmem_comm_world);
+}
+
+void oshmem_shmem_barrier_pmix(void)
+{
+    opal_pmix.fence(NULL, 0);
 }

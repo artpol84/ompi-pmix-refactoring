@@ -124,6 +124,11 @@ OSHMEM_DECLSPEC int oshmem_shmem_allgatherv(void *send_buf, void* rcv_buf, int s
 OSHMEM_DECLSPEC void oshmem_shmem_barrier(void);
 
 /**
+ * Barrier between all PEs
+ */
+OSHMEM_DECLSPEC void oshmem_shmem_barrier_pmix(void);
+
+/**
  * Register OSHMEM specific runtime parameters
  */
 OSHMEM_DECLSPEC int oshmem_shmem_register_params(void);
