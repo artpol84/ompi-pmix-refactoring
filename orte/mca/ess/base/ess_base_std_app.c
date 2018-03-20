@@ -67,6 +67,7 @@
 #include "orte/util/session_dir.h"
 #include "orte/util/name_fns.h"
 #include "orte/util/show_help.h"
+#include "opal/util/timings.h"
 
 #include "orte/runtime/orte_cr.h"
 #include "orte/runtime/orte_globals.h"
@@ -80,6 +81,7 @@ int orte_ess_base_app_setup(bool db_restrict_local)
     char *error = NULL;
     opal_list_t transports;
 
+    OPAL_TIMING_ENV_INIT(ess_base_setup);
     /*
      * stdout/stderr buffering
      * If the user requested to override the default setting then do
@@ -122,6 +124,7 @@ int orte_ess_base_app_setup(bool db_restrict_local)
         error = "orte_state_base_select";
         goto error;
     }
+    OPAL_TIMING_ENV_NEXT(ess_base_setup, "state_framework_open");
 
     /* open the errmgr */
     if (ORTE_SUCCESS != (ret = mca_base_framework_open(&orte_errmgr_base_framework, 0))) {
@@ -129,6 +132,7 @@ int orte_ess_base_app_setup(bool db_restrict_local)
         error = "orte_errmgr_base_open";
         goto error;
     }
+    OPAL_TIMING_ENV_NEXT(ess_base_setup, "errmgr_framework_open");
 
     /* setup my session directory */
     if (orte_create_session_dirs) {
@@ -148,6 +152,8 @@ int orte_ess_base_app_setup(bool db_restrict_local)
         opal_output_set_output_file_info(orte_process_info.proc_session_dir,
                                          "output-", NULL, NULL);
     }
+    OPAL_TIMING_ENV_NEXT(ess_base_setup, "create_session_dirs");
+
     /* Setup the communication infrastructure */
     /* Routed system */
     if (ORTE_SUCCESS != (ret = mca_base_framework_open(&orte_routed_base_framework, 0))) {
@@ -160,6 +166,8 @@ int orte_ess_base_app_setup(bool db_restrict_local)
         error = "orte_routed_base_select";
         goto error;
     }
+    OPAL_TIMING_ENV_NEXT(ess_base_setup, "routed_framework_open");
+
     /*
      * OOB Layer
      */
@@ -173,6 +181,8 @@ int orte_ess_base_app_setup(bool db_restrict_local)
         error = "orte_oob_base_select";
         goto error;
     }
+    OPAL_TIMING_ENV_NEXT(ess_base_setup, "oob_framework_open");
+    
     /* Runtime Messaging Layer */
     if (ORTE_SUCCESS != (ret = mca_base_framework_open(&orte_rml_base_framework, 0))) {
         ORTE_ERROR_LOG(ret);
@@ -184,6 +194,8 @@ int orte_ess_base_app_setup(bool db_restrict_local)
         error = "orte_rml_base_select";
         goto error;
     }
+    OPAL_TIMING_ENV_NEXT(ess_base_setup, "rml_framework_open");
+    
     /* if we have info on the HNP and local daemon, process it */
     if (NULL != orte_process_info.my_hnp_uri) {
         /* we have to set the HNP's name, even though we won't route messages directly
@@ -234,6 +246,7 @@ int orte_ess_base_app_setup(bool db_restrict_local)
         error = "orte_errmgr_base_select";
         goto error;
     }
+    OPAL_TIMING_ENV_NEXT(ess_base_setup, "errmgr_select");
 
     /* get a conduit for our use - we never route IO over fabric */
     OBJ_CONSTRUCT(&transports, opal_list_t);
@@ -255,6 +268,7 @@ int orte_ess_base_app_setup(bool db_restrict_local)
         goto error;
     }
     OPAL_LIST_DESTRUCT(&transports);
+    OPAL_TIMING_ENV_NEXT(ess_base_setup, "rml_open_conduit");
 
     /*
      * Group communications
@@ -269,6 +283,7 @@ int orte_ess_base_app_setup(bool db_restrict_local)
         error = "orte_grpcomm_base_select";
         goto error;
     }
+    OPAL_TIMING_ENV_NEXT(ess_base_setup, "grpcomm_framework_open");
 
 #if OPAL_ENABLE_FT_CR == 1
     /*
@@ -319,6 +334,8 @@ int orte_ess_base_app_setup(bool db_restrict_local)
         error = "orte_dfs_base_select";
         goto error;
     }
+    OPAL_TIMING_ENV_NEXT(ess_base_setup, "dfs_framework_open");
+
     return ORTE_SUCCESS;
  error:
     orte_show_help("help-orte-runtime.txt",
