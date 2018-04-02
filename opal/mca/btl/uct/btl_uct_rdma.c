@@ -111,7 +111,7 @@ int mca_btl_uct_put (mca_btl_base_module_t *btl, mca_btl_base_endpoint_t *endpoi
     uct_ep_h ep_handle;
     int rc;
 
-    printf("mca_btl_uct_put: %d\n", (context - module->contexts));
+    printf("mca_btl_uct_put: %d\n", (context - uct_module->contexts));
 
     if (size >  uct_module->super.btl_put_local_registration_threshold && cbfunc) {
         comp = mca_btl_uct_uct_completion_alloc (btl, endpoint, local_address, local_handle, cbfunc, cbcontext, cbdata);
