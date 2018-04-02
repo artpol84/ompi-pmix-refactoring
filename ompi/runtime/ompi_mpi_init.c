@@ -804,6 +804,14 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
     /* some btls/mtls require we call add_procs with all procs in the job.
      * since the btls/mtls have no visibility here it is up to the pml to
      * convey this requirement */
+
+    {
+        volatile int delay = 1;
+        while( delay ) {
+            sleep(1);
+        }
+    }
+
     if (1 || mca_pml_base_requires_world ()) {
         if (NULL == (procs = ompi_proc_world (&nprocs))) {
             error = "ompi_proc_get_allocated () failed";
