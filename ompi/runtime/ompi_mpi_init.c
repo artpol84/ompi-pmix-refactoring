@@ -806,7 +806,7 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided)
      * convey this requirement */
 
     {
-        volatile int delay = 0;
+        volatile int delay = 1;
         while( delay ) {
             sleep(1);
         }
