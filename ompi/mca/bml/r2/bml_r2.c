@@ -394,6 +394,14 @@ static int mca_bml_r2_add_proc (struct ompi_proc_t *proc)
         return OMPI_ERR_OUT_OF_RESOURCE;
     }
 
+    {
+        volatile int delay = 1;
+        while( delay ) {
+            sleep(1);
+        }
+    }
+
+
     for (size_t p_index = 0 ; p_index < mca_bml_r2.num_btl_modules ; ++p_index) {
         mca_btl_base_module_t *btl = mca_bml_r2.btl_modules[p_index];
         struct mca_btl_base_endpoint_t *btl_endpoint = NULL;
@@ -492,6 +500,13 @@ static int mca_bml_r2_add_procs( size_t nprocs,
 
     if ( 0 == n_new_procs ) {
         return OMPI_SUCCESS;
+    }
+
+    {
+        volatile int delay = 1;
+        while( delay ) {
+            sleep(1);
+        }
     }
 
     /* Starting from here we only work on the unregistered procs */
