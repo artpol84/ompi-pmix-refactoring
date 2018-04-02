@@ -446,7 +446,7 @@ static mca_btl_base_module_t **mca_btl_uct_component_init (int *num_btl_modules,
     }
 
     {
-        static volatile int delay = 0;
+        static volatile int delay = 1;
         while( delay ){
             sleep(1);
         }
