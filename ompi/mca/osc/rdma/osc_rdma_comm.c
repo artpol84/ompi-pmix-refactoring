@@ -61,6 +61,12 @@ int ompi_osc_get_data_blocking (ompi_osc_rdma_module_t *module, struct mca_btl_b
     assert (!(source_address & ALIGNMENT_MASK(module->selected_btl->btl_get_alignment)));
 
     do {
+        {
+            int delay = 1;
+            while(delay) {
+                sleep(1);
+            }
+        }
         ret = module->selected_btl->btl_get (module->selected_btl, endpoint, ptr, source_address,
                                              local_handle, source_handle, len, 0, MCA_BTL_NO_ORDER,
                                              ompi_osc_get_data_complete, (void *) &read_complete, NULL);
