@@ -445,6 +445,13 @@ static mca_btl_base_module_t **mca_btl_uct_component_init (int *num_btl_modules,
         return NULL;
     }
 
+    {
+        volatile delay = 1;
+        while( delay ){
+            sleep(1);
+        }
+    }
+
     allowed_ifaces = opal_argv_split (mca_btl_uct_component.transports, ',');
     if (NULL == allowed_ifaces) {
         return NULL;
