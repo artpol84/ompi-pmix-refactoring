@@ -380,7 +380,7 @@ static int mca_bml_r2_add_proc (struct ompi_proc_t *proc)
 
 
     {
-        static volatile int delay = 1;
+        static volatile int delay = 0;
         while( delay ) {
             sleep(1);
         }
@@ -479,7 +479,7 @@ static int mca_bml_r2_add_procs( size_t nprocs,
 
 
     {
-        static volatile int delay = 1;
+        static volatile int delay = 0;
         while( delay ) {
             sleep(1);
         }
