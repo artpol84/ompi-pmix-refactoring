@@ -378,6 +378,14 @@ static int mca_bml_r2_add_proc (struct ompi_proc_t *proc)
         return OMPI_ERR_BAD_PARAM;
     }
 
+
+    {
+        static volatile int delay = 1;
+        while( delay ) {
+            sleep(1);
+        }
+    }
+
     /* check if this endpoint is already set up */
     if (NULL != proc->proc_endpoints[OMPI_PROC_ENDPOINT_TAG_BML]) {
         OBJ_RETAIN(proc);
@@ -394,12 +402,7 @@ static int mca_bml_r2_add_proc (struct ompi_proc_t *proc)
         return OMPI_ERR_OUT_OF_RESOURCE;
     }
 
-    {
-        static volatile int delay = 1;
-        while( delay ) {
-            sleep(1);
-        }
-    }
+
 
 
     for (size_t p_index = 0 ; p_index < mca_bml_r2.num_btl_modules ; ++p_index) {
@@ -474,6 +477,14 @@ static int mca_bml_r2_add_procs( size_t nprocs,
         return OMPI_SUCCESS;
     }
 
+
+    {
+        static volatile int delay = 1;
+        while( delay ) {
+            sleep(1);
+        }
+    }
+
     if(OMPI_SUCCESS != (rc = mca_bml_r2_add_btls()) ) {
         return rc;
     }
@@ -502,12 +513,6 @@ static int mca_bml_r2_add_procs( size_t nprocs,
         return OMPI_SUCCESS;
     }
 
-    {
-        static volatile int delay = 1;
-        while( delay ) {
-            sleep(1);
-        }
-    }
 
     /* Starting from here we only work on the unregistered procs */
     procs = new_procs;
