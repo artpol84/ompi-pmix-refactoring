@@ -46,17 +46,21 @@ int ompi_osc_get_data_blocking (ompi_osc_rdma_module_t *module, struct mca_btl_b
     OSC_RDMA_VERBOSE(MCA_BASE_VERBOSE_TRACE, "reading state data from endpoint %p. source: 0x%" PRIx64 ", len: %lu",
                      (void *) endpoint, source_address, (unsigned long) len);
 
-    if (module->selected_btl->btl_register_mem && len >= module->selected_btl->btl_get_local_registration_threshold) {
-        ret = ompi_osc_rdma_frag_alloc (module, len, &frag, &ptr);
-        if (OPAL_UNLIKELY(OMPI_SUCCESS != ret)) {
-            OSC_RDMA_VERBOSE(MCA_BASE_VERBOSE_ERROR, "error allocating temporary buffer");
-            return ret;
-        }
+//    if (module->selected_btl->btl_register_mem && len >= module->selected_btl->btl_get_local_registration_threshold) {
+//        ret = ompi_osc_rdma_frag_alloc (module, len, &frag, &ptr);
+//        if (OPAL_UNLIKELY(OMPI_SUCCESS != ret)) {
+//            OSC_RDMA_VERBOSE(MCA_BASE_VERBOSE_ERROR, "error allocating temporary buffer");
+//            return ret;
+//        }
 
-        local_handle = frag->handle;
-        OSC_RDMA_VERBOSE(MCA_BASE_VERBOSE_TRACE, "allocated temporary buffer %p in fragment %p", (void*)ptr,
-                         (void *) frag);
-    }
+//        local_handle = frag->handle;
+//        OSC_RDMA_VERBOSE(MCA_BASE_VERBOSE_TRACE, "allocated temporary buffer %p in fragment %p", (void*)ptr,
+//                         (void *) frag);
+//    }
+
+    ret = ompi_osc_rdma_register (module, MCA_BTL_ENDPOINT_ANY, data, len,
+                                  MCA_BTL_REG_FLAG_ACCESS_ANY, &local_handle);
+    assert(OMPI_SUCCESS == ret);
 
     assert (!(source_address & ALIGNMENT_MASK(module->selected_btl->btl_get_alignment)));
 
