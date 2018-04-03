@@ -179,6 +179,10 @@ static int mca_btl_uct_reg_mem (void *reg_data, void *base, size_t size, mca_rca
         uct_flags = UCT_MD_MEM_ACCESS_ALL;
     }
 
+    printf("btl/uct: register memory: %p, size = %zd, flags = %x\n",
+           base, size, uct_flags);
+    fflush(stdout);
+
     ucs_status = uct_md_mem_reg (uct_module->uct_md->uct_md, base, size, uct_flags, &uct_reg->uct_memh);
     if (UCS_OK != ucs_status) {
         BTL_VERBOSE(("Error registering memory with UCT. code: %d", ucs_status));

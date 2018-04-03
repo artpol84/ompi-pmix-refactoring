@@ -397,6 +397,8 @@ static int ompi_osc_rdma_initialize_region (ompi_osc_rdma_module_t *module, void
 
     if (module->selected_btl->btl_register_mem && size) {
         if (MPI_WIN_FLAVOR_ALLOCATE != module->flavor || NULL == module->state_handle) {
+            OSC_RDMA_VERBOSE(MCA_BASE_VERBOSE_ERROR, "osc/rdma: register user-visible window: base=%p, size=%zd",
+                             *base, size);
             ret = ompi_osc_rdma_register (module, MCA_BTL_ENDPOINT_ANY, *base, size, MCA_BTL_REG_FLAG_ACCESS_ANY,
                                           &module->base_handle);
             if (OPAL_UNLIKELY(OMPI_SUCCESS != ret)) {
@@ -457,6 +459,8 @@ static int allocate_state_single (ompi_osc_rdma_module_t *module, void **base, s
     }
 
     /* just go ahead and register the whole segment */
+    OSC_RDMA_VERBOSE(MCA_BASE_VERBOSE_ERROR, "osc/rdma: register whole window: base=%p, size=%zd",
+                     module->rank_array, total_size);
     ret = ompi_osc_rdma_register (module, MCA_BTL_ENDPOINT_ANY, module->rank_array, total_size,
                                   MCA_BTL_REG_FLAG_ACCESS_ANY, &module->state_handle);
     if (OPAL_UNLIKELY(OMPI_SUCCESS != ret)) {
