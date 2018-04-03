@@ -105,6 +105,7 @@ static int ompi_osc_rdma_peer_setup (ompi_osc_rdma_module_t *module, ompi_osc_rd
     int node_id, node_rank, array_index;
     int ret, disp_unit, comm_size;
     char *peer_data;
+    char buf[128];
 
     OSC_RDMA_VERBOSE(MCA_BASE_VERBOSE_DEBUG, "configuring peer for rank %d", peer->rank);
 
@@ -136,10 +137,11 @@ static int ompi_osc_rdma_peer_setup (ompi_osc_rdma_module_t *module, ompi_osc_rd
                      ", size: %lu", peer->rank, node_rank, array_index, array_pointer, sizeof (rank_data));
 
     ret = ompi_osc_get_data_blocking (module, array_endpoint, array_pointer, (mca_btl_base_registration_handle_t *) array_peer_data->btl_handle_data,
-                                      &rank_data, sizeof (rank_data));
+                                      buf, 65);
     if (OPAL_UNLIKELY(OMPI_SUCCESS != ret)) {
         return ret;
     }
+    memcpy(&rank_data, buf, sizeof (rank_data));
 
     /* initialize the state part of the peer object. NTH: for now the state data is for every node is stored on
      * every node. this gives a good balance of code complexity and memory usage at this time. we take advantage
@@ -175,10 +177,11 @@ static int ompi_osc_rdma_peer_setup (ompi_osc_rdma_module_t *module, ompi_osc_rd
 
     /* read window data from the end of the target's state structure */
     ret = ompi_osc_get_data_blocking (module, peer->state_endpoint, peer->state + peer_data_offset, peer->state_handle,
-                                      peer_data, peer_data_size);
+                                      buf, 65);
     if (OPAL_UNLIKELY(OMPI_SUCCESS != ret)) {
         return ret;
     }
+    memcpy(peer_data, buf, peer_data_size);
 
     if (!module->same_disp_unit) {
         /* unpack displacement */
