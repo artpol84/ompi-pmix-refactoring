@@ -136,6 +136,7 @@ static int ompi_osc_rdma_peer_setup (ompi_osc_rdma_module_t *module, ompi_osc_rd
     OSC_RDMA_VERBOSE(MCA_BASE_VERBOSE_DEBUG, "reading region data for %d from rank: %d, index: %d, pointer: 0x%" PRIx64
                      ", size: %lu", peer->rank, node_rank, array_index, array_pointer, sizeof (rank_data));
 
+    memset(buf, 0xff, 128);
     ret = ompi_osc_get_data_blocking (module, array_endpoint, array_pointer, (mca_btl_base_registration_handle_t *) array_peer_data->btl_handle_data,
                                       buf, 65);
     if (OPAL_UNLIKELY(OMPI_SUCCESS != ret)) {
