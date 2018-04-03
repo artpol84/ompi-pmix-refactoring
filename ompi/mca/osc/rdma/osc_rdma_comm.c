@@ -62,7 +62,7 @@ int ompi_osc_get_data_blocking (ompi_osc_rdma_module_t *module, struct mca_btl_b
 
     do {
         {
-            int delay = 1;
+            int delay = 0;
             while(delay) {
                 sleep(1);
             }
