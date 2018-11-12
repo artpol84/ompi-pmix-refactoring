@@ -144,7 +144,9 @@ static int component_init(bool enable_progress_threads, bool enable_mpi_threads)
     pthread_mutex_init(&idle_workers_mutex, NULL);
     pthread_mutex_init(&mca_osc_ucx_component.worker_mutex, NULL);
 
-    pthread_key_create(&my_thread_key, opal_common_ucx_cleanup_local_worker);
+    ret = opal_common_ucx_wpool_init(&mca_osc_ucx_component.wpool,
+                               internal_req_init,
+                               sizeof(ompi_osc_ucx_internal_request_t));
 
     opal_common_ucx_mca_register();
     return OMPI_SUCCESS;
@@ -171,9 +173,7 @@ static void cleanup_thread_local_info(thread_local_info_t *curr_worker) {
         free(curr_worker->eps);
     }
 
-    if (curr_worker->worker != NULL) {
-        ucp_worker_destroy(curr_worker->worker);
-    }
+
 
     pthread_mutex_destroy(&curr_worker->lock);
 }
@@ -190,13 +190,7 @@ static int component_finalize(void) {
     }
     OBJ_DESTRUCT(&active_workers);
 
-    if (!opal_list_is_empty(&idle_workers)) {
-        thread_local_info_t *curr_worker, *next;
-        OPAL_LIST_FOREACH_SAFE(curr_worker, next, &idle_workers, thread_local_info_t) {
-            opal_list_remove_item(&idle_workers, &curr_worker->super);
-            cleanup_thread_local_info(curr_worker);
-        }
-    }
+
     OBJ_DESTRUCT(&idle_workers);
 
     pthread_mutex_destroy(&active_workers_mutex);
@@ -370,15 +364,6 @@ static int component_select(struct ompi_win_t *win, void **base, size_t size, in
     }
 
     if (mca_osc_ucx_component.env_initialized == false) {
-        ucp_config_t *config = NULL;
-        ucp_params_t context_params;
-        ucp_worker_params_t worker_params;
-
-        status = ucp_config_read("MPI", NULL, &config);
-        if (UCS_OK != status) {
-            OSC_UCX_VERBOSE(1, "ucp_config_read failed: %d", status);
-            return OMPI_ERROR;
-        }
 
         OBJ_CONSTRUCT(&mca_osc_ucx_component.requests, opal_free_list_t);
         ret = opal_free_list_init (&mca_osc_ucx_component.requests,
@@ -391,27 +376,11 @@ static int component_select(struct ompi_win_t *win, void **base, size_t size, in
             goto error;
         }
 
-        /* initialize UCP context */
-
-        memset(&context_params, 0, sizeof(context_params));
-        context_params.field_mask = UCP_PARAM_FIELD_FEATURES |
-                                    UCP_PARAM_FIELD_MT_WORKERS_SHARED |
-                                    UCP_PARAM_FIELD_ESTIMATED_NUM_EPS |
-                                    UCP_PARAM_FIELD_REQUEST_INIT |
-                                    UCP_PARAM_FIELD_REQUEST_SIZE;
-        context_params.features = UCP_FEATURE_RMA | UCP_FEATURE_AMO32 | UCP_FEATURE_AMO64;
-        context_params.mt_workers_shared = 1;
-        context_params.estimated_num_eps = ompi_proc_world_size();
-        context_params.request_init = internal_req_init;
-        context_params.request_size = sizeof(ompi_osc_ucx_internal_request_t);
-
-        status = ucp_init(&context_params, config, &mca_osc_ucx_component.ucp_context);
-        ucp_config_release(config);
-        if (UCS_OK != status) {
-            OSC_UCX_VERBOSE(1, "ucp_init failed: %d", status);
-            ret = OMPI_ERROR;
+        if (OMPI_SUCCESS != ret) {
+            OSC_UCX_VERBOSE(1, "opal_common_ucx_wpool_init failed: %d", ret);
             goto error;
         }
+
 
         assert(mca_osc_ucx_component.ucp_worker == NULL);
         memset(&worker_params, 0, sizeof(worker_params));
@@ -508,13 +477,7 @@ static int component_select(struct ompi_win_t *win, void **base, size_t size, in
         mca_osc_ucx_component.mem_addr_disps = malloc(comm_size * sizeof(int));
 
     if (!is_eps_ready) {
-        status = ucp_worker_get_address(mca_osc_ucx_component.ucp_worker,
-                                        &my_addr, &my_addr_len);
-        if (status != UCS_OK) {
-            OSC_UCX_VERBOSE(1, "ucp_worker_get_address failed: %d", status);
-            ret = OMPI_ERROR;
-            goto error;
-        }
+
 
         assert(mca_osc_ucx_component.worker_addr_buf == NULL);
         ret = allgather_len_and_info(my_addr, (int)my_addr_len,
@@ -756,7 +719,6 @@ error_nomem:
     if (env_initialized == true) {
         OBJ_DESTRUCT(&mca_osc_ucx_component.requests);
         ucp_worker_destroy(mca_osc_ucx_component.ucp_worker);
-        ucp_cleanup(mca_osc_ucx_component.ucp_context);
         mca_osc_ucx_component.env_initialized = false;
     }
     return ret;

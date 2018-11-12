@@ -219,82 +219,47 @@ int opal_common_ucx_atomic_cswap(ucp_ep_h ep, uint64_t compare,
     return ret;
 }
 
-static inline void opal_common_ucx_cleanup_local_worker(void *arg) {
-    thread_local_info_t *my_thread_info = (thread_local_info_t *)arg;
+/* -------------------------- */
 
-    assert(my_thread_info != NULL);
+typedef struct {
+    ucp_context_h ucp_ctx;
+    opal_mutex_t mutex;
+	opal_list_t idle_workers;
+    ucp_worker_h recv_worker;
+    char *recv_waddr;
+    size_t recv_waddr_len;
+    int cur_ctxid, cur_memid;
+} opal_common_ucx_wpool_t;
 
-    pthread_mutex_lock(&active_workers_mutex);
-    opal_list_remove_item(&active_workers, &my_thread_info->super);
-    pthread_mutex_unlock(&active_workers_mutex);
+typedef struct {
+    int ctx_id;
+    opal_common_ucx_wpool_t *wpool;
+    opal_mutex_t mutex;
+    opal_list_t workers;
+    char *rcv_worker_addrs;
+    int *rcv_worker_displs;
+} opal_common_ucx_ctx_t;
 
-    pthread_mutex_lock(&idle_workers_mutex);
-    opal_list_append(&idle_workers, &my_thread_info->super);
-    pthread_mutex_unlock(&idle_workers_mutex);
-}
+typedef struct {
+    int mem_id;
+    opal_common_ucx_ctx_t *ctx;
+    opal_mutex_t mutex;
+    opal_list_t mem_regions;
+    char *mem_addrs;
+    int *mem_displs;
+} opal_common_ucx_mem_t;
 
-static inline int opal_common_ucx_create_local_worker(ucp_context_h context, int comm_size,
-                                                      char *worker_buf, int *worker_disps,
-                                                      char *mem_buf, int *mem_disps)
-{
-    ucp_worker_params_t worker_params;
-    ucs_status_t status;
-    thread_local_info_t *my_thread_info;
-    int i, ret = OPAL_SUCCESS;
+typedef enum {
+    OPAL_COMMON_UCX_PUT,
+    OPAL_COMMON_UCX_GET
+} opal_common_ucx_op_t;
 
-    if (!opal_list_is_empty(&idle_workers)) {
-        pthread_mutex_lock(&idle_workers_mutex);
-        my_thread_info = (thread_local_info_t *)opal_list_get_first(&idle_workers);
-        opal_list_remove_item(&idle_workers, &my_thread_info->super);
-        pthread_mutex_unlock(&idle_workers_mutex);
-    } else {
-        my_thread_info = OBJ_NEW(thread_local_info_t);
-        memset(my_thread_info, 0, sizeof(thread_local_info_t));
-        pthread_mutex_init(&(my_thread_info->lock), NULL);
+typedef enum {
+    OPAL_COMMON_UCX_SCOPE_EP,
+    OPAL_COMMON_UCX_SCOPE_WORKER
+} opal_common_ucx_flush_scope_t;
 
-        my_thread_info->comm_size = comm_size;
 
-        memset(&worker_params, 0, sizeof(worker_params));
-        worker_params.field_mask = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
-        worker_params.thread_mode = UCS_THREAD_MODE_SINGLE;
-        status = ucp_worker_create(context, &worker_params,
-                                   &(my_thread_info->worker));
-        if (UCS_OK != status) {
-            ret = OPAL_ERROR;
-        }
-
-        my_thread_info->eps = calloc(comm_size, sizeof(ucp_ep_h));
-        my_thread_info->rkeys = calloc(comm_size, sizeof(ucp_rkey_h));
-
-        for (i = 0; i < comm_size; i++) {
-            ucp_ep_params_t ep_params;
-
-            memset(&ep_params, 0, sizeof(ucp_ep_params_t));
-            ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
-            ep_params.address = (ucp_address_t *)&(worker_buf[worker_disps[i]]);
-            status = ucp_ep_create(my_thread_info->worker, &ep_params,
-                                   &my_thread_info->eps[i]);
-            if (status != UCS_OK) {
-                ret = OPAL_ERROR;
-            }
-
-            status = ucp_ep_rkey_unpack(my_thread_info->eps[i],
-                                        &(mem_buf[mem_disps[i] + 3 * sizeof(uint64_t)]),
-                                        &(my_thread_info->rkeys[i]));
-            if (status != UCS_OK) {
-                ret = OPAL_ERROR;
-            }
-        }
-    }
-
-    pthread_mutex_lock(&active_workers_mutex);
-    opal_list_append(&active_workers, &my_thread_info->super);
-    pthread_mutex_unlock(&active_workers_mutex);
-
-    pthread_setspecific(my_thread_key, my_thread_info);
-
-    return ret;
-}
 
 END_C_DECLS
 
