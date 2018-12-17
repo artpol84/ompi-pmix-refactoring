@@ -62,8 +62,6 @@ static char *mca_base_verbose = NULL;
 static void set_defaults(opal_output_stream_t *lds);
 static void parse_verbose(char *e, opal_output_stream_t *lds);
 
-int opal_common_ucx_wpmem_flush_lock = 1;
-
 /*
  * Main MCA initialization.
  */

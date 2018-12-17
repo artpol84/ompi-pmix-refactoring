@@ -32,6 +32,7 @@
 #include "opal/threads/mutex.h"
 #include "opal/util/info.h"
 
+int opal_common_ucx_wpmem_flush_lock = 1;
 
 static void unregister_tree_item(mca_mpool_base_tree_item_t *mpool_tree_item)
 {
