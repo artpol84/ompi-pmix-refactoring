@@ -1270,6 +1270,7 @@ opal_common_ucx_winfo_flush(opal_common_ucx_winfo_t *winfo, int target,
     return rc;
 }
 
+extern int opal_common_ucx_wpmem_flush_lock = 1;
 
 OPAL_DECLSPEC int
 opal_common_ucx_wpmem_flush(opal_common_ucx_wpmem_t *mem,
@@ -1283,7 +1284,9 @@ opal_common_ucx_wpmem_flush(opal_common_ucx_wpmem_t *mem,
     WPOOL_DBG_OUT(_dbg_tls || _dbg_mem, "mem = %p, target = %d\n",
                   (void *)mem, target);
 
-    opal_mutex_lock(&ctx->mutex);
+    if (opal_common_ucx_wpmem_flush_lock) {
+        opal_mutex_lock(&ctx->mutex);
+    }
 
     OPAL_LIST_FOREACH(item, &ctx->tls_workers, _ctx_record_list_item_t) {
         if ((scope == OPAL_COMMON_UCX_SCOPE_EP) &&
@@ -1316,7 +1319,10 @@ opal_common_ucx_wpmem_flush(opal_common_ucx_wpmem_t *mem,
                       (void *)item->ptr->endpoints[target],
                       (void *)item->ptr->worker);
     }
-    opal_mutex_unlock(&ctx->mutex);
+
+    if (opal_common_ucx_wpmem_flush_lock) {
+        opal_mutex_unlock(&ctx->mutex);
+    }
 
     return rc;
 }
