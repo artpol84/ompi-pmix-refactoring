@@ -1270,7 +1270,7 @@ opal_common_ucx_winfo_flush(opal_common_ucx_winfo_t *winfo, int target,
     return rc;
 }
 
-extern int opal_common_ucx_wpmem_flush_lock = 1;
+extern int opal_common_ucx_wpmem_flush_lock;
 
 OPAL_DECLSPEC int
 opal_common_ucx_wpmem_flush(opal_common_ucx_wpmem_t *mem,
