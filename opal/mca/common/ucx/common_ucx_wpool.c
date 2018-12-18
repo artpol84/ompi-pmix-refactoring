@@ -63,8 +63,6 @@ _winfo_create(opal_common_ucx_wpool_t *wpool)
     winfo->endpoints = NULL;
     winfo->comm_size = 0;
     winfo->released = 0;
-    winfo->shared->inflight_ops = NULL;
-    winfo->shared->global_inflight_ops = 0;
     winfo->inflight_req = UCS_OK;
 
     //winfo->shared = malloc(64, sizeof(winfo->shared));
@@ -72,6 +70,8 @@ _winfo_create(opal_common_ucx_wpool_t *wpool)
         exit(1);
     }
     OBJ_CONSTRUCT(&winfo->shared->mutex, opal_recursive_mutex_t);
+    winfo->shared->inflight_ops = NULL;
+    winfo->shared->global_inflight_ops = 0;
 
     WPOOL_DBG_OUT(_dbg_winfo, "winfo = %p, worker = %p\n",
                   (void*)winfo, (void *)winfo->worker);
