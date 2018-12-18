@@ -1,4 +1,6 @@
 #include "opal_config.h"
+#include <stdlib.h>
+#include <stdlib.h>
 
 #include "common_ucx.h"
 #include "common_ucx_wpool.h"
@@ -57,14 +59,19 @@ _winfo_create(opal_common_ucx_wpool_t *wpool)
         goto release_worker;
     }
 
-    OBJ_CONSTRUCT(&winfo->mutex, opal_recursive_mutex_t);
     winfo->worker = worker;
     winfo->endpoints = NULL;
     winfo->comm_size = 0;
     winfo->released = 0;
-    winfo->inflight_ops = NULL;
-    winfo->global_inflight_ops = 0;
+    winfo->shared->inflight_ops = NULL;
+    winfo->shared->global_inflight_ops = 0;
     winfo->inflight_req = UCS_OK;
+
+    //winfo->shared = malloc(64, sizeof(winfo->shared));
+    if( posix_memalign((void**)&winfo->shared, 64, sizeof(*winfo->shared)) ){
+        exit(1);
+    }
+    OBJ_CONSTRUCT(&winfo->shared->mutex, opal_recursive_mutex_t);
 
     WPOOL_DBG_OUT(_dbg_winfo, "winfo = %p, worker = %p\n",
                   (void*)winfo, (void *)winfo->worker);
@@ -96,7 +103,7 @@ _winfo_reset(opal_common_ucx_winfo_t *winfo)
             assert(winfo->inflight_ops[i] == 0);
         }
         free(winfo->endpoints);
-        free(winfo->inflight_ops);
+        free(winfo->shared->inflight_ops);
     }
     winfo->endpoints = NULL;
     winfo->comm_size = 0;
@@ -110,7 +117,7 @@ _winfo_release(opal_common_ucx_winfo_t *winfo)
 {
     WPOOL_DBG_OUT(_dbg_winfo, "winfo = %p, worker = %p\n",
                   (void*)winfo, (void *)winfo->worker);
-    OBJ_DESTRUCT(&winfo->mutex);
+    OBJ_DESTRUCT(&winfo->shared->mutex);
     ucp_worker_destroy(winfo->worker);
     free(winfo);
 }
@@ -307,7 +314,7 @@ opal_common_ucx_wpool_progress(opal_common_ucx_wpool_t *wpool)
         OPAL_LIST_FOREACH_SAFE(item, next, &wpool->active_workers,
                                _winfo_list_item_t) {
             opal_common_ucx_winfo_t *winfo = item->ptr;
-            opal_mutex_lock(&winfo->mutex);
+            opal_mutex_lock(&winfo->shared->mutex);
             if( OPAL_UNLIKELY(winfo->released) ) {
                 /* Do garbage collection of worker info's if needed */
                 opal_list_remove_item(&wpool->active_workers, &item->super);
@@ -317,7 +324,7 @@ opal_common_ucx_wpool_progress(opal_common_ucx_wpool_t *wpool)
                 /* Progress worker until there are existing events */
                 while(ucp_worker_progress(winfo->worker));
             }
-            opal_mutex_unlock(&winfo->mutex);
+            opal_mutex_unlock(&winfo->shared->mutex);
         }
         opal_mutex_unlock(&wpool->mutex);
     }
@@ -385,7 +392,7 @@ _wpool_get_idle(opal_common_ucx_wpool_t *wpool, size_t comm_size)
                   (void *)wpool, (void *)winfo);
 
     winfo->endpoints = calloc(comm_size, sizeof(ucp_ep_h));
-    winfo->inflight_ops = calloc(comm_size, sizeof(short));
+    winfo->shared->inflight_ops = calloc(comm_size, sizeof(short));
     winfo->comm_size = comm_size;
     return winfo;
 }
@@ -518,9 +525,9 @@ _common_ucx_wpctx_remove(opal_common_ucx_ctx_t *ctx,
                            _ctx_record_list_item_t) {
         if (winfo == item->ptr) {
             opal_list_remove_item(&ctx->tls_workers, &item->super);
-            opal_mutex_lock(&winfo->mutex);
+            opal_mutex_lock(&winfo->shared->mutex);
             winfo->released = 1;
-            opal_mutex_unlock(&winfo->mutex);
+            opal_mutex_unlock(&winfo->shared->mutex);
             OBJ_RELEASE(item);
             break;
         }
@@ -1000,18 +1007,18 @@ static int _tlocal_ctx_connect(_tlocal_ctx_t *ctx_rec, int target)
     memset(&ep_params, 0, sizeof(ucp_ep_params_t));
     ep_params.field_mask = UCP_EP_PARAM_FIELD_REMOTE_ADDRESS;
 
-    opal_mutex_lock(&winfo->mutex);
+    opal_mutex_lock(&winfo->shared->mutex);
     displ = gctx->recv_worker_displs[target];
     ep_params.address = (ucp_address_t *)&(gctx->recv_worker_addrs[displ]);
     status = ucp_ep_create(winfo->worker, &ep_params, &winfo->endpoints[target]);
     if (status != UCS_OK) {
-        opal_mutex_unlock(&winfo->mutex);
+        opal_mutex_unlock(&winfo->shared->mutex);
         MCA_COMMON_UCX_VERBOSE(1, "ucp_ep_create failed: %d", status);
         return OPAL_ERROR;
     }
     WPOOL_DBG_OUT(_dbg_tls || _dbg_ctx, "worker = %p ep = %p\n",
                   (void *)winfo->worker, (void *)winfo->endpoints[target]);
-    opal_mutex_unlock(&winfo->mutex);
+    opal_mutex_unlock(&winfo->shared->mutex);
     return OPAL_SUCCESS;
 }
 
@@ -1293,20 +1300,52 @@ opal_common_ucx_wpmem_flush(opal_common_ucx_wpmem_t *mem,
                 (NULL == item->ptr->endpoints[target])) {
             continue;
         }
-        opal_mutex_lock(&item->ptr->mutex);
+
+        /* If this worker/target already flushed - proceed
+         * to the next one */
+        switch (scope) {
+        case OPAL_COMMON_UCX_SCOPE_WORKER:
+            if (!item->ptr->shared->global_inflight_ops) {
+                continue;
+            }
+            break;
+        case OPAL_COMMON_UCX_SCOPE_EP:
+            if (!item->ptr->shared->inflight_ops[target]) {
+                continue;
+            }
+            break;
+        }
+
+        opal_mutex_lock(&item->ptr->shared->mutex);
+
+        /* Check once again after getting a lock */
+        switch (scope) {
+        case OPAL_COMMON_UCX_SCOPE_WORKER:
+            if (!item->ptr->shared->global_inflight_ops) {
+                goto skip;
+            }
+            break;
+        case OPAL_COMMON_UCX_SCOPE_EP:
+            if (!item->ptr->shared->inflight_ops[target]) {
+                goto skip;
+            }
+            break;
+        }
+
         rc = opal_common_ucx_winfo_flush(item->ptr, target, OPAL_COMMON_UCX_FLUSH_B,
                                          scope, NULL);
         switch (scope) {
         case OPAL_COMMON_UCX_SCOPE_WORKER:
-            item->ptr->global_inflight_ops = 0;
-            memset(item->ptr->inflight_ops, 0, item->ptr->comm_size * sizeof(short));
+            item->ptr->shared->global_inflight_ops = 0;
+            memset(item->ptr->shared->inflight_ops, 0, item->ptr->comm_size * sizeof(short));
             break;
         case OPAL_COMMON_UCX_SCOPE_EP:
-            item->ptr->global_inflight_ops -= item->ptr->inflight_ops[target];
-            item->ptr->inflight_ops[target] = 0;
+            item->ptr->shared->global_inflight_ops -= item->ptr->shared->inflight_ops[target];
+            item->ptr->shared->inflight_ops[target] = 0;
             break;
         }
-        opal_mutex_unlock(&item->ptr->mutex);
+skip:
+        opal_mutex_unlock(&item->ptr->shared->mutex);
 
         if (rc != OPAL_SUCCESS) {
             MCA_COMMON_UCX_ERROR("opal_common_ucx_flush failed: %d",
