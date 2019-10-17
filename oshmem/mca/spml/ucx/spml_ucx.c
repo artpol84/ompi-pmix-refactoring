@@ -589,6 +589,44 @@ static inline void _ctx_remove(mca_spml_ucx_ctx_array_t *array, mca_spml_ucx_ctx
     opal_atomic_wmb ();
 }
 
+static int __new_ucp_ctx( ucp_context_h *ctx)
+{
+    ucs_status_t err;
+    ucp_config_t *ucp_config;
+    ucp_params_t params;
+
+    err = ucp_config_read("OSHMEM", NULL, &ucp_config);
+    if (UCS_OK != err) {
+        return OSHMEM_ERROR;
+    }
+
+    memset(&params, 0, sizeof(params));
+    params.field_mask        = UCP_PARAM_FIELD_FEATURES          |
+                               UCP_PARAM_FIELD_ESTIMATED_NUM_EPS |
+                               UCP_PARAM_FIELD_MT_WORKERS_SHARED;
+    params.features          = UCP_FEATURE_RMA   |
+                               UCP_FEATURE_AMO32 |
+                               UCP_FEATURE_AMO64;
+    params.estimated_num_eps = ompi_proc_world_size();
+    if (oshmem_mpi_thread_requested == SHMEM_THREAD_MULTIPLE) {
+        params.mt_workers_shared = 1;
+    } else {
+        params.mt_workers_shared = 0;
+    }
+
+#if HAVE_DECL_UCP_PARAM_FIELD_ESTIMATED_NUM_PPN
+    params.estimated_num_ppn = opal_process_info.num_local_peers + 1;
+    params.field_mask       |= UCP_PARAM_FIELD_ESTIMATED_NUM_PPN;
+#endif
+
+    err = ucp_init(&params, ucp_config, ctx);
+    ucp_config_release(ucp_config);
+    if (UCS_OK != err) {
+        return OSHMEM_ERROR;
+    }
+    return OSHMEM_SUCCESS;
+}
+
 static int mca_spml_ucx_ctx_create_common(long options, mca_spml_ucx_ctx_t **ucx_ctx_p)
 {
     ucp_worker_params_t params;
@@ -604,6 +642,8 @@ static int mca_spml_ucx_ctx_create_common(long options, mca_spml_ucx_ctx_t **ucx
     ucx_ctx = malloc(sizeof(mca_spml_ucx_ctx_t));
     ucx_ctx->options = options;
 
+    __new_ucp_ctx(&ucx_ctx->ucp_ctx);
+
     params.field_mask  = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
     if (oshmem_mpi_thread_provided == SHMEM_THREAD_SINGLE || options & SHMEM_CTX_PRIVATE || options & SHMEM_CTX_SERIALIZED) {
         params.thread_mode = UCS_THREAD_MODE_SINGLE;
@@ -611,7 +651,7 @@ static int mca_spml_ucx_ctx_create_common(long options, mca_spml_ucx_ctx_t **ucx
         params.thread_mode = UCS_THREAD_MODE_MULTI;
     }
 
-    err = ucp_worker_create(mca_spml_ucx.ucp_context, &params,
+    err = ucp_worker_create(ucx_ctx->ucp_ctx, &params,
                             &ucx_ctx->ucp_worker);
     if (UCS_OK != err) {
         free(ucx_ctx);

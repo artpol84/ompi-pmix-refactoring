@@ -67,6 +67,7 @@ struct ucp_peer {
 typedef struct ucp_peer ucp_peer_t;
  
 struct mca_spml_ucx_ctx {
+    ucp_context_h            ucp_ctx;
     ucp_worker_h             ucp_worker;
     ucp_peer_t              *ucp_peers;
     long                     options;

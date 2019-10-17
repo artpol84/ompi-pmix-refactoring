@@ -403,6 +403,7 @@ static int mca_spml_ucx_component_fini(void)
     /* delete all workers */
     for (i = 0; i < mca_spml_ucx.active_array.ctxs_count; i++) {
         ucp_worker_destroy(mca_spml_ucx.active_array.ctxs[i]->ucp_worker);
+        ucp_cleanup(mca_spml_ucx.active_array.ctxs[i]->ucp_ctx);
         free(mca_spml_ucx.active_array.ctxs[i]);
     }
 
