@@ -91,7 +91,7 @@ opal_timing_ts_func_t opal_timing_ts_func(opal_timer_type_t type);
 #define OPAL_TIMING_ENV_INIT_PREFIX(prefix, name)                                 \
     do {                                                                          \
         opal_timing_env_t name ## _val, *name = &(name ## _val);                  \
-        *name = OPAL_TIMING_ENV_START_TYPE(__func__, name, OPAL_TIMING_AUTOMATIC_TIMER, prefix); \
+        OPAL_TIMING_ENV_START_TYPE(__func__, name, OPAL_TIMING_AUTOMATIC_TIMER, prefix); \
     } while(0)
 
 #define OPAL_TIMING_ENV_NEXT(h, ...)                                              \
