@@ -536,10 +536,10 @@ void mca_memheap_modex_recv_all(void)
         oshmem_shmem_barrier();
         return;
     }
-    OPAL_TIMING_ENV_NEXT(comm_query, "barrier");
+    OPAL_TIMING_ENV_NEXT(recv_all, "barrier");
     nprocs = oshmem_num_procs();
     my_pe = oshmem_my_proc_id();
-    OPAL_TIMING_ENV_NEXT(comm_query, "proc position");
+    OPAL_TIMING_ENV_NEXT(recv_all, "proc position");
     /* buffer allocation for num_transports
      * message sizes and offsets */
 
@@ -563,7 +563,7 @@ void mca_memheap_modex_recv_all(void)
         rc = OSHMEM_ERR_OUT_OF_RESOURCE;
         goto exit_fatal;
     }
-    OPAL_TIMING_ENV_NEXT(comm_query, "alloc bufs");
+    OPAL_TIMING_ENV_NEXT(recv_all, "alloc bufs");
 
     /* serialize our own mkeys */
     msg = OBJ_NEW(opal_buffer_t);
@@ -586,7 +586,7 @@ void mca_memheap_modex_recv_all(void)
     opal_dss.unload(msg, &send_buffer, &size);
     MEMHEAP_VERBOSE(1, "local keys packed into %d bytes, %d segments", size, memheap_map->n_segments);
 
-    OPAL_TIMING_ENV_NEXT(comm_query, "serialize data");
+    OPAL_TIMING_ENV_NEXT(recv_all, "serialize data");
 
 
     /* we need to send num_transports and message sizes separately
@@ -598,7 +598,7 @@ void mca_memheap_modex_recv_all(void)
         goto exit_fatal;
     }
 
-    OPAL_TIMING_ENV_NEXT(comm_query, "allgather: transport cnt");
+    OPAL_TIMING_ENV_NEXT(recv_all, "allgather: transport cnt");
 
 
     rc = oshmem_shmem_allgather(&size, rcv_size, sizeof(int));
@@ -607,7 +607,7 @@ void mca_memheap_modex_recv_all(void)
         goto exit_fatal;
     }
 
-    OPAL_TIMING_ENV_NEXT(comm_query, "allgather: size info");
+    OPAL_TIMING_ENV_NEXT(recv_all, "allgather: size info");
 
     /* calculating offsets (displacements) for allgatherv */
 
@@ -625,7 +625,7 @@ void mca_memheap_modex_recv_all(void)
         goto exit_fatal;
     }
 
-    OPAL_TIMING_ENV_NEXT(comm_query, "alloc data buf");
+    OPAL_TIMING_ENV_NEXT(recv_all, "alloc data buf");
 
     rc = oshmem_shmem_allgatherv(send_buffer, rcv_buffer, size, rcv_size, rcv_offsets);
     if (MPI_SUCCESS != rc) {
@@ -634,7 +634,7 @@ void mca_memheap_modex_recv_all(void)
         goto exit_fatal;
     }
 
-    OPAL_TIMING_ENV_NEXT(comm_query, "Perform mkey exchange");
+    OPAL_TIMING_ENV_NEXT(recv_all, "Perform mkey exchange");
 
     opal_dss.load(msg, rcv_buffer, buffer_size);
 
@@ -667,7 +667,7 @@ void mca_memheap_modex_recv_all(void)
         }
     }
 
-    OPAL_TIMING_ENV_NEXT(comm_query, "Unpack data");
+    OPAL_TIMING_ENV_NEXT(recv_all, "Unpack data");
 
     OPAL_THREAD_UNLOCK(&memheap_oob.lck);
 
@@ -688,7 +688,7 @@ exit_fatal:
         OBJ_RELEASE(msg);
     }
 
-    OPAL_TIMING_ENV_NEXT(comm_query, "Cleanup");
+    OPAL_TIMING_ENV_NEXT(recv_all, "Cleanup");
     /* This function requires abort in any error case */
     if (OSHMEM_SUCCESS != rc) {
         oshmem_shmem_abort(rc);
