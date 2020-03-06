@@ -17,12 +17,15 @@
 #include "oshmem/mca/sshmem/base/base.h"
 #include "oshmem/mca/memheap/memheap.h"
 #include "oshmem/mca/memheap/base/base.h"
+#include "ompi/util/timings.h"
 
 
 int mca_memheap_base_alloc_init(mca_memheap_map_t *map, size_t size, long hint)
 {
     int ret = OSHMEM_SUCCESS;
     char * seg_filename = NULL;
+
+    OPAL_TIMING_ENV_INIT(timing);
 
     assert(map);
     if (hint == 0) {
@@ -33,7 +36,12 @@ int mca_memheap_base_alloc_init(mca_memheap_map_t *map, size_t size, long hint)
 
     map_segment_t *s = &map->mem_segs[map->n_segments];
     seg_filename = oshmem_get_unique_file_name(oshmem_my_proc_id());
+
+    OPAL_TIMING_ENV_NEXT(timing, "oshmem_get_unique_file_name()");
+
     ret = mca_sshmem_segment_create(s, seg_filename, size, hint);
+
+    OPAL_TIMING_ENV_NEXT(timing, "mca_sshmem_segment_create()");
 
     if (OSHMEM_SUCCESS == ret) {
         map->n_segments++;
@@ -43,6 +51,7 @@ int mca_memheap_base_alloc_init(mca_memheap_map_t *map, size_t size, long hint)
     }
 
     free(seg_filename);
+        OPAL_TIMING_ENV_NEXT(timing, "DONE");
 
     return ret;
 }

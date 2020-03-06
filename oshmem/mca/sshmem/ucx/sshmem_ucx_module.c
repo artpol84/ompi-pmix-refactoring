@@ -27,6 +27,8 @@
 
 //#include <ucs/sys/math.h>
 
+#include "ompi/util/timings.h"
+
 #if HAVE_UCX_DEVICE_MEM
 #include <ucp/core/ucp_resource.h>
 #include <uct/ib/base/ib_alloc.h>
@@ -112,10 +114,13 @@ segment_create_internal(map_segment_t *ds_buf, void *address, size_t size,
     ucp_mem_h mem_h;
     ucs_status_t status;
 
+    OPAL_TIMING_ENV_INIT(timing);
     assert(ds_buf);
 
     /* init the contents of map_segment_t */
     shmem_ds_reset(ds_buf);
+
+    OPAL_TIMING_ENV_NEXT(timing, "shmem_ds_reset()");
 
     mem_map_params.field_mask = UCP_MEM_MAP_PARAM_FIELD_ADDRESS |
                                 UCP_MEM_MAP_PARAM_FIELD_LENGTH |
@@ -131,6 +136,8 @@ segment_create_internal(map_segment_t *ds_buf, void *address, size_t size,
         rc = OSHMEM_ERROR;
         goto out;
     }
+
+    OPAL_TIMING_ENV_NEXT(timing, "ucp_mem_map()");
 
     if (!(flags & UCP_MEM_MAP_FIXED)) {
         /* Memory was allocated at an arbitrary address; obtain it */
@@ -148,6 +155,8 @@ segment_create_internal(map_segment_t *ds_buf, void *address, size_t size,
     } else {
         ds_buf->super.va_base = mem_map_params.address;
     }
+
+    OPAL_TIMING_ENV_NEXT(timing, "get address");
 
     ctx = calloc(1, sizeof(*ctx));
     if (!ctx) {
@@ -177,6 +186,9 @@ out:
            (rc ? "failure" : "successful"),
            ds_buf->seg_id, ds_buf->super.va_base, (unsigned long)ds_buf->seg_size)
       );
+
+    OPAL_TIMING_ENV_NEXT(timing, "DONE");
+
     return rc;
 }
 

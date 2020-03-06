@@ -171,6 +171,8 @@ int oshmem_shmem_init(int argc, char **argv, int requested, int *provided)
         OMPI_TIMING_IMPORT_OPAL("_shmem_init");
         OMPI_TIMING_IMPORT_OPAL("mca_memheap_base_select");
         OMPI_TIMING_IMPORT_OPAL("_memheap_create");
+        OMPI_TIMING_IMPORT_OPAL("mca_memheap_base_alloc_init");
+        OMPI_TIMING_IMPORT_OPAL("segment_create_internal");
 
         if (OSHMEM_SUCCESS != ret) {
             return ret;
