@@ -183,6 +183,7 @@ int oshmem_shmem_init(int argc, char **argv, int requested, int *provided)
         /* this is a collective op, implies barrier */
         MCA_MEMHEAP_CALL(get_all_mkeys());
         OMPI_TIMING_NEXT("get_all_mkeys()");
+	OMPI_TIMING_IMPORT_OPAL("mca_memheap_modex_recv_all");
 
         oshmem_shmem_preconnect_all();
         OMPI_TIMING_NEXT("shmem_preconnect_all");
@@ -207,7 +208,7 @@ int oshmem_shmem_init(int argc, char **argv, int requested, int *provided)
     return ret;
 }
 
-int oshmem_shmem_preconnect_all(void)
+int  oshmem_shmem_preconnect_all(void)
 {
     int rc = OSHMEM_SUCCESS;
 
