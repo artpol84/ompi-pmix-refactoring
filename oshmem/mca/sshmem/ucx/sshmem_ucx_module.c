@@ -114,6 +114,7 @@ segment_create_internal(map_segment_t *ds_buf, void *address, size_t size,
     ucp_mem_h mem_h;
     ucs_status_t status;
 
+    static int call_count = 0;
     char prefix[256];
     sprintf(prefix, "call%d", call_count);
     call_count++;
