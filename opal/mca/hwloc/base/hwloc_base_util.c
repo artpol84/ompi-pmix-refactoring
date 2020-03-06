@@ -346,7 +346,7 @@ int opal_hwloc_base_get_topology(void)
                             "hwloc:base[%s:%d] getting topology XML string",
                             __FILE__, __LINE__);
 #if HWLOC_API_VERSION >= 0x20000
-        OPAL_MODEX_RECV_VALUE_IMMEDIATE(rc, OPAL_PMIX_TOPOLOGY,
+        OPAL_MODEX_RECV_VALUE_IMMEDIATE(rc, OPAL_PMIX_LOCAL_TOPO,
                                         &wildcard_rank, &val, OPAL_STRING);
 #else
         OPAL_MODEX_RECV_VALUE_IMMEDIATE(rc, OPAL_PMIX_HWLOC_XML_V1,
