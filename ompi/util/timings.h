@@ -275,6 +275,8 @@ typedef struct ompi_timing_t {
 
 #define OMPI_TIMING_IMPORT_OPAL(func)
 
+#define OMPI_TIMING_IMPORT_OPAL_PREFIX(_prefix, func)
+
 #define OMPI_TIMING_FINALIZE
 
 #define OMPI_TIMING_ENABLED 0

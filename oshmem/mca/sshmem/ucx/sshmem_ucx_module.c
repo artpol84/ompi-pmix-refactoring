@@ -114,7 +114,12 @@ segment_create_internal(map_segment_t *ds_buf, void *address, size_t size,
     ucp_mem_h mem_h;
     ucs_status_t status;
 
-    OPAL_TIMING_ENV_INIT(timing);
+    char prefix[256];
+    sprintf(prefix, "call%d", call_count);
+    call_count++;
+
+    OPAL_TIMING_ENV_INIT_PREFIX(prefix, timing);
+
     assert(ds_buf);
 
     /* init the contents of map_segment_t */
