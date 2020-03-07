@@ -176,9 +176,6 @@ opal_timing_ts_func_t opal_timing_ts_func(opal_timer_type_t type);
         }                                                                         \
     } while(0)
 
-#define OPAL_TIMING_ENV_CNT(func, _cnt)                                           \
-    OPAL_TIMING_ENV_CNT_PREFIX("", func, _cnt)
-
 #define OPAL_TIMING_ENV_GETDESC_PREFIX(prefix, filename, func, i, desc, _t)       \
     do {                                                                          \
         char vname[OPAL_TIMING_STR_LEN];                                          \
