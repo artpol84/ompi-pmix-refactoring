@@ -156,7 +156,7 @@ opal_timing_ts_func_t opal_timing_ts_func(opal_timer_type_t type);
     do {                                                                          \
         char ename[OPAL_TIMING_STR_LEN];                                          \
         char *ptr = NULL;                                                         \
-        int n = snprintf(ename, OPAL_TIMING_STR_LEN, "OMPI_TIMING_%s%s_CNT", prefix, func);    \
+        int n = snprintf(ename, OPAL_TIMING_STR_LEN, "OMPI_TIMING_%s_%s_CNT", prefix, func);    \
         (_cnt) = 0;                                                               \
         if ( n <= OPAL_TIMING_STR_LEN ){                                          \
             ptr = getenv(ename);                                                  \
