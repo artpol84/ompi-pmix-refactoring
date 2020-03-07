@@ -173,17 +173,6 @@ int oshmem_shmem_init(int argc, char **argv, int requested, int *provided)
         OMPI_TIMING_IMPORT_OPAL("_memheap_create");
 
 
-        do {
-            char ename[OPAL_TIMING_STR_LEN];
-            char *ptr = NULL;
-            int n = snprintf(ename, OPAL_TIMING_STR_LEN, "OMPI_TIMING_%s_%s_CNT", "regular_mem", "mca_memheap_base_alloc_init");
-            if ( n <= OPAL_TIMING_STR_LEN ){
-                ptr = getenv(ename);
-                printf("Verify import: %s = %s\n", ename, ptr);
-            }
-        } while(0);
-
-        //?? Does this work ???
         OMPI_TIMING_IMPORT_OPAL_PREFIX("regular_mem", "mca_memheap_base_alloc_init");
         OMPI_TIMING_IMPORT_OPAL_PREFIX("device_mem", "mca_memheap_base_alloc_init");
         OMPI_TIMING_IMPORT_OPAL_PREFIX("exec_0", "segment_create_internal");
