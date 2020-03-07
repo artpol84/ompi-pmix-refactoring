@@ -120,7 +120,7 @@ typedef struct ompi_timing_t {
         }                                                                          \
     } while(0)
 
-#define OMPI_TIMING_APPEND(filename,func,desc,ts)                                  \
+#define OMPI_TIMING_APPEND_PREFIX(filename,func,desc,ts)                                  \
     do {                                                                           \
         if (OMPI_TIMING.cur_timing->use >= OMPI_TIMING.size){                      \
             OMPI_TIMING_ITEM_EXTEND;                                               \
@@ -130,7 +130,7 @@ typedef struct ompi_timing_t {
         if (len >= OPAL_TIMING_STR_LEN) {                                          \
             OMPI_TIMING.error = 1;                                                 \
         }                                                                          \
-        OMPI_TIMING.cur_timing->val[OMPI_TIMING.cur_timing->use].prefix = func;    \
+        OMPI_TIMING.cur_timing->val[OMPI_TIMING.cur_timing->use].prefix = prefix "_" func;    \
         OMPI_TIMING.cur_timing->val[OMPI_TIMING.cur_timing->use].file = filename;  \
         OMPI_TIMING.cur_timing->val[OMPI_TIMING.cur_timing->use++].ts = ts;        \
         OMPI_TIMING.cnt++;                                                         \
@@ -152,7 +152,7 @@ typedef struct ompi_timing_t {
                     OMPI_TIMING.import_cnt;                                        \
                 OPAL_TIMING_ENV_GETDESC_PREFIX(_prefix, &filename, func, i, &desc, ts);  \
         printf("Import %s/%s. #%d = %s\n", _prefix, func, i, desc); \
-                OMPI_TIMING_APPEND(filename, func, desc, ts);                      \
+                OMPI_TIMING_APPEND_PREFIX(filename, _prefix, func, desc, ts);      \
             }                                                                      \
         }                                                                          \
     } while(0)
