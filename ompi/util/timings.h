@@ -134,7 +134,7 @@ typedef struct ompi_timing_t {
             OMPI_TIMING.cur_timing->val[OMPI_TIMING.cur_timing->use].prefix =      \
                                                               func "/" _prefix;    \
         } else {                                                                   \
-            OMPI_TIMING.cur_timing->val[OMPI_TIMING.cur_timing->use].prefix = func \
+            OMPI_TIMING.cur_timing->val[OMPI_TIMING.cur_timing->use].prefix = func;\
         }                                                                          \
         OMPI_TIMING.cur_timing->val[OMPI_TIMING.cur_timing->use].file = filename;  \
         OMPI_TIMING.cur_timing->val[OMPI_TIMING.cur_timing->use++].ts = ts;        \
