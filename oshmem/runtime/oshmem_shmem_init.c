@@ -148,7 +148,7 @@ int oshmem_shmem_init(int argc, char **argv, int requested, int *provided)
 {
     int ret = OSHMEM_SUCCESS;
 
-    OMPI_TIMING_INIT(32);
+    OMPI_TIMING_INIT(128);
 
     if (!oshmem_shmem_initialized) {
         ret = ompi_mpi_init(argc, argv, requested, provided, true);
@@ -171,6 +171,18 @@ int oshmem_shmem_init(int argc, char **argv, int requested, int *provided)
         OMPI_TIMING_IMPORT_OPAL("_shmem_init");
         OMPI_TIMING_IMPORT_OPAL("mca_memheap_base_select");
         OMPI_TIMING_IMPORT_OPAL("_memheap_create");
+
+        do {
+            char ename[OPAL_TIMING_STR_LEN];
+            char *ptr = NULL;
+            int n = snprintf(ename, OPAL_TIMING_STR_LEN, "OMPI_TIMING_%s%s_CNT", "regular_mem", "mca_memheap_base_alloc_init");
+            (_cnt) = 0;
+            if ( n <= OPAL_TIMING_STR_LEN ){
+                ptr = getenv(ename);
+                if( NULL != ptr ){ (_cnt) = atoi(ptr); };
+            }
+        } while(0)
+
         OMPI_TIMING_IMPORT_OPAL_PREFIX("regular_mem", "mca_memheap_base_alloc_init");
         OMPI_TIMING_IMPORT_OPAL_PREFIX("device_mem", "mca_memheap_base_alloc_init");
         OMPI_TIMING_IMPORT_OPAL_PREFIX("exec_0", "segment_create_internal");
