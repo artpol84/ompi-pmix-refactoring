@@ -144,7 +144,7 @@ typedef struct ompi_timing_t {
             double ts;                                                             \
             OMPI_TIMING.import_cnt++;                                              \
             OPAL_TIMING_ENV_CNT_PREFIX(_prefix, func, cnt);                        \
-    printf("Import %s/%s. cnt = %s\n", _prefix, func, cnt); \
+    printf("Import %s/%s. cnt = %d\n", _prefix, func, cnt); \
             OPAL_TIMING_ENV_ERROR_PREFIX(_prefix, func, OMPI_TIMING.error);        \
             for(i = 0; i < cnt; i++){                                              \
                 char *desc, *filename;                                             \
