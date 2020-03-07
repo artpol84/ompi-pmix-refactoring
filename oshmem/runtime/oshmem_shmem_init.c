@@ -177,7 +177,6 @@ int oshmem_shmem_init(int argc, char **argv, int requested, int *provided)
             char ename[OPAL_TIMING_STR_LEN];
             char *ptr = NULL;
             int n = snprintf(ename, OPAL_TIMING_STR_LEN, "OMPI_TIMING_%s%s_CNT", "regular_mem", "mca_memheap_base_alloc_init");
-            (_cnt) = 0;
             if ( n <= OPAL_TIMING_STR_LEN ){
                 ptr = getenv(ename);
                 printf("Verify import: %s = %s\n", ename, ptr);
