@@ -49,11 +49,11 @@ opal_timing_ts_func_t opal_timing_ts_func(opal_timer_type_t type);
             _prefix = "";                                                         \
         }                                                                         \
         (_nm)->error = 0;                                                         \
-        n = snprintf((_nm)->id, OPAL_TIMING_STR_LEN, "%s%s", _prefix, func);      \
+        n = snprintf((_nm)->id, OPAL_TIMING_STR_LEN, "%s_%s", _prefix, func);     \
         if( n > OPAL_TIMING_STR_LEN ){                                            \
              (_nm)->error = 1;                                                    \
         }                                                                         \
-        n = sprintf((_nm)->cntr_env,"OMPI_TIMING_%s%s_CNT", prefix, (_nm)->id);   \
+        n = sprintf((_nm)->cntr_env,"OMPI_TIMING_%s_CNT", (_nm)->id);             \
         if( n > OPAL_TIMING_STR_LEN ){                                            \
             (_nm)->error = 1;                                                     \
         }                                                                         \
@@ -180,11 +180,11 @@ opal_timing_ts_func_t opal_timing_ts_func(opal_timer_type_t type);
     do {                                                                          \
         char vname[OPAL_TIMING_STR_LEN];                                          \
         (_t) = 0.0;                                                               \
-        sprintf(vname, "OMPI_TIMING_%s%s_FILE_%d", prefix, func, i);              \
+        sprintf(vname, "OMPI_TIMING_%s_%s_FILE_%d", prefix, func, i);              \
         *filename = getenv(vname);                                                \
-        sprintf(vname, "OMPI_TIMING_%s%s_DESC_%d", prefix, func, i);              \
+        sprintf(vname, "OMPI_TIMING_%s_%s_DESC_%d", prefix, func, i);              \
         *desc = getenv(vname);                                                    \
-        sprintf(vname, "OMPI_TIMING_%s%s_VAL_%d", prefix, func, i);               \
+        sprintf(vname, "OMPI_TIMING_%s_%s_VAL_%d", prefix, func, i);               \
         char *ptr = getenv(vname);                                                \
         if ( NULL != ptr ) {                                                      \
             sscanf(ptr,"%lf", &(_t));                                             \
