@@ -144,12 +144,14 @@ typedef struct ompi_timing_t {
             double ts;                                                             \
             OMPI_TIMING.import_cnt++;                                              \
             OPAL_TIMING_ENV_CNT_PREFIX(_prefix, func, cnt);                        \
+    printf("Import %s/%s. cnt = %s\n", _prefix, func, cnt); \
             OPAL_TIMING_ENV_ERROR_PREFIX(_prefix, func, OMPI_TIMING.error);        \
             for(i = 0; i < cnt; i++){                                              \
                 char *desc, *filename;                                             \
                 OMPI_TIMING.cur_timing->val[OMPI_TIMING.cur_timing->use].imported= \
                     OMPI_TIMING.import_cnt;                                        \
                 OPAL_TIMING_ENV_GETDESC_PREFIX(_prefix, &filename, func, i, &desc, ts);  \
+        printf("Import %s/%s. #%d = %s\n", _prefix, func, i, desc); \
                 OMPI_TIMING_APPEND(filename, func, desc, ts);                      \
             }                                                                      \
         }                                                                          \

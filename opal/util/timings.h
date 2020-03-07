@@ -54,7 +54,6 @@ opal_timing_ts_func_t opal_timing_ts_func(opal_timer_type_t type);
              (_nm)->error = 1;                                                    \
         }                                                                         \
         n = sprintf((_nm)->cntr_env,"OMPI_TIMING_%s_CNT", (_nm)->id);             \
-         printf("Count var is %s\n", (_nm)->cntr_env); \
         if( n > OPAL_TIMING_STR_LEN ){                                            \
             (_nm)->error = 1;                                                     \
         }                                                                         \
@@ -100,7 +99,6 @@ opal_timing_ts_func_t opal_timing_ts_func(opal_timer_type_t type);
             /* enabled codepath */                                                \
             time = h->get_ts() - h->ts;                                           \
             n = snprintf(buf1, OPAL_TIMING_STR_LEN, "OMPI_TIMING_%s_DESC_%d", h->id, h->cntr); \
-printf("Export %s\n", buf1); \
             if ( n > OPAL_TIMING_STR_LEN ){                                       \
                 h->error = 1;                                                     \
             }                                                                     \
