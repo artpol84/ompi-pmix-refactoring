@@ -116,7 +116,7 @@ segment_create_internal(map_segment_t *ds_buf, void *address, size_t size,
 
     static int call_count = 0;
     char prefix[256];
-    sprintf(prefix, "call%d", call_count);
+    sprintf(prefix, "exec_%d", call_count);
     call_count++;
 
     OPAL_TIMING_ENV_INIT_PREFIX(prefix, timing);

@@ -127,7 +127,8 @@ static memheap_context_t* _memheap_create(void)
     /* Inititialize symmetric area */
     if (OSHMEM_SUCCESS == rc) {
         rc = mca_memheap_base_alloc_init(&mca_memheap_base_map,
-                                         user_size + MEMHEAP_BASE_PRIVATE_SIZE, 0);
+                                         user_size + MEMHEAP_BASE_PRIVATE_SIZE, 0,
+                                         "regular_mem");
     }
 
     OPAL_TIMING_ENV_NEXT(timing, "mca_memheap_base_alloc_init()");
@@ -136,7 +137,8 @@ static memheap_context_t* _memheap_create(void)
     size = mca_memheap_base_config.device_nic_mem_seg_size;
     if ((OSHMEM_SUCCESS == rc) && (size > 0)) {
         rc = mca_memheap_base_alloc_init(&mca_memheap_base_map, size,
-                                         SHMEM_HINT_DEVICE_NIC_MEM);
+                                         SHMEM_HINT_DEVICE_NIC_MEM,
+                                         "device_mem");
         if (rc == OSHMEM_ERR_NOT_IMPLEMENTED) {
             /* do not treat NOT_IMPLEMENTED as error */
             rc = OSHMEM_SUCCESS;
