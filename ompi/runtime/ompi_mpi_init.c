@@ -381,7 +381,7 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided,
     volatile bool active;
     bool background_fence = false;
 
-    OMPI_TIMING_INIT(64);
+    OMPI_TIMING_INIT(128);
 
     ompi_hook_base_mpi_init_top(argc, argv, requested, provided);
 
@@ -544,12 +544,15 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided,
                                  (void*)&errtrk);
     OMPI_LAZY_WAIT_FOR_COMPLETION(errtrk.active);
 
+
+
     OPAL_LIST_DESTRUCT(&info);
     if (OPAL_SUCCESS != errtrk.status) {
         error = "Error handler registration";
         ret = errtrk.status;
         goto error;
     }
+    OMPI_TIMING_NEXT("opal_pmix.register_evhandler()");
 
     /* declare our presence for interlib coordination, and
      * register for callbacks when other libs declare */
@@ -557,6 +560,7 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided,
         error = "ompi_interlib_declare";
         goto error;
     }
+    OMPI_TIMING_NEXT("ompi_interlib_declare()");
 
     /* initialize datatypes. This step should be done early as it will
      * create the local convertor and local arch used in the proc
@@ -566,12 +570,14 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided,
         error = "ompi_datatype_init() failed";
         goto error;
     }
+    OMPI_TIMING_NEXT("ompi_datatype_init()");
 
     /* Initialize OMPI procs */
     if (OMPI_SUCCESS != (ret = ompi_proc_init())) {
         error = "mca_proc_init() failed";
         goto error;
     }
+    OMPI_TIMING_NEXT("ompi_proc_init()");
 
     /* Initialize the op framework. This has to be done *after*
        ddt_init, but befor mca_coll_base_open, since some collective
@@ -581,16 +587,23 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided,
         error = "ompi_op_base_open() failed";
         goto error;
     }
+    OMPI_TIMING_NEXT("open OP");
+
     if (OMPI_SUCCESS !=
         (ret = ompi_op_base_find_available(OPAL_ENABLE_PROGRESS_THREADS,
                                            ompi_mpi_thread_multiple))) {
         error = "ompi_op_base_find_available() failed";
         goto error;
     }
+    OMPI_TIMING_NEXT("find OP");
+
+
+
     if (OMPI_SUCCESS != (ret = ompi_op_init())) {
         error = "ompi_op_init() failed";
         goto error;
     }
+    OMPI_TIMING_NEXT("ompi_op_init()");
 
     /* Open up MPI-related MCA components */
 
@@ -598,35 +611,50 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided,
         error = "mca_allocator_base_open() failed";
         goto error;
     }
+    OMPI_TIMING_NEXT("open ALLOCATOR");
+
     if (OMPI_SUCCESS != (ret = mca_base_framework_open(&opal_rcache_base_framework, 0))) {
         error = "mca_rcache_base_open() failed";
         goto error;
     }
+    OMPI_TIMING_NEXT("open RCACHE");
+
     if (OMPI_SUCCESS != (ret = mca_base_framework_open(&opal_mpool_base_framework, 0))) {
         error = "mca_mpool_base_open() failed";
         goto error;
     }
+    OMPI_TIMING_NEXT("open MPOOL");
+
     if (OMPI_SUCCESS != (ret = mca_base_framework_open(&ompi_bml_base_framework, 0))) {
         error = "mca_bml_base_open() failed";
         goto error;
     }
+    OMPI_TIMING_NEXT("open ALLOCATORML");
+
     if (OMPI_SUCCESS != (ret = mca_bml_base_init (1, ompi_mpi_thread_multiple))) {
         error = "mca_bml_base_init() failed";
         goto error;
     }
+    OMPI_TIMING_NEXT("mca_bml_base_init()");
+
     if (OMPI_SUCCESS != (ret = mca_base_framework_open(&ompi_pml_base_framework, 0))) {
         error = "mca_pml_base_open() failed";
         goto error;
     }
+    OMPI_TIMING_NEXT("open PML");
+
     if (OMPI_SUCCESS != (ret = mca_base_framework_open(&ompi_coll_base_framework, 0))) {
         error = "mca_coll_base_open() failed";
         goto error;
     }
+    OMPI_TIMING_NEXT("open COLL");
 
     if (OMPI_SUCCESS != (ret = mca_base_framework_open(&ompi_osc_base_framework, 0))) {
         error = "ompi_osc_base_open() failed";
         goto error;
     }
+    OMPI_TIMING_NEXT("open OSC");
+
 
 #if OPAL_ENABLE_FT_CR == 1
     if (OMPI_SUCCESS != (ret = mca_base_framework_open(&ompi_crcp_base_framework, 0))) {
@@ -649,6 +677,7 @@ int ompi_mpi_init(int argc, char **argv, int requested, int *provided,
         error = "mca_pml_base_select() failed";
         goto error;
     }
+    OMPI_TIMING_NEXT("mca_pml_base_select()");
 
     OMPI_TIMING_IMPORT_OPAL("orte_init");
     OMPI_TIMING_NEXT("rte_init-commit");
