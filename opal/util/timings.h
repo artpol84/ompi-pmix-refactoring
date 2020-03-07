@@ -77,11 +77,6 @@ opal_timing_ts_func_t opal_timing_ts_func(opal_timer_type_t type);
         }                                                                         \
     } while(0)
 
-#define OPAL_TIMING_ENV_INIT(name)                                                \
-    opal_timing_env_t name ## _val, *name = &(name ## _val);                      \
-    OPAL_TIMING_ENV_START_TYPE(__func__, name, OPAL_TIMING_AUTOMATIC_TIMER, "");
-
-
 /* We use function names for identification
  * however this might be a problem for the private
  * functions declared as static as their names may
@@ -89,10 +84,10 @@ opal_timing_ts_func_t opal_timing_ts_func(opal_timer_type_t type);
  * Use prefix to do a finer-grained identification if needed
  */
 #define OPAL_TIMING_ENV_INIT_PREFIX(prefix, name)                                 \
-    do {                                                                          \
-        opal_timing_env_t name ## _val, *name = &(name ## _val);                  \
-        OPAL_TIMING_ENV_START_TYPE(__func__, name, OPAL_TIMING_AUTOMATIC_TIMER, prefix); \
-    } while(0)
+    opal_timing_env_t name ## _val, *name = &(name ## _val);                      \
+    OPAL_TIMING_ENV_START_TYPE(__func__, name, OPAL_TIMING_AUTOMATIC_TIMER, prefix);
+
+#define OPAL_TIMING_ENV_INIT(name) OPAL_TIMING_ENV_INIT_PREFIX("", name)
 
 #define OPAL_TIMING_ENV_NEXT(h, ...)                                              \
     do {                                                                          \
