@@ -130,7 +130,12 @@ typedef struct ompi_timing_t {
         if (len >= OPAL_TIMING_STR_LEN) {                                          \
             OMPI_TIMING.error = 1;                                                 \
         }                                                                          \
-        OMPI_TIMING.cur_timing->val[OMPI_TIMING.cur_timing->use].prefix = func "/" _prefix;    \
+        if( _prefix[0] ) {                                                         \
+            OMPI_TIMING.cur_timing->val[OMPI_TIMING.cur_timing->use].prefix =      \
+                                                              func "/" _prefix;    \
+        } else {                                                                   \
+            OMPI_TIMING.cur_timing->val[OMPI_TIMING.cur_timing->use].prefix = func \
+        }                                                                          \
         OMPI_TIMING.cur_timing->val[OMPI_TIMING.cur_timing->use].file = filename;  \
         OMPI_TIMING.cur_timing->val[OMPI_TIMING.cur_timing->use++].ts = ts;        \
         OMPI_TIMING.cnt++;                                                         \
