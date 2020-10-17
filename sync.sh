@@ -3,4 +3,4 @@
 HOST=$1
 DIR=$2
 
-rsync -r $DIR/* $HOST:$DIR
+rsync -ra $DIR/* $HOST:$DIR
