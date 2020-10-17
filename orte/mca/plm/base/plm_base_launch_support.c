@@ -1071,6 +1071,12 @@ void orte_plm_base_daemon_callback(int status, orte_process_name_t* sender,
             OBJ_RELEASE(kv);
         }
 
+                 // MLNX-DPM debug
+        if ( 1 ){
+            opal_value_t *vptr;
+            opal_pmix.get(&dname, OPAL_PMIX_PROC_URI, NULL, &vptr);
+            daemon->rml_uri = strdup(vptr->data.string);
+        }
         /* unpack the node name */
         idx = 1;
         if (ORTE_SUCCESS != (rc = opal_dss.unpack(buffer, &nodename, &idx, OPAL_STRING))) {
