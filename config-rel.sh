@@ -4,6 +4,11 @@ if [[ -z "${UCX}" ]]; then
 source ./hpcx.paths
 fi
 
+echo ${UCX}
+echo ${HCOLL}
+echo $PATH
+echo $LD_LIBRARY_PATH
+
 ./configure --prefix=`pwd`/install-rel \
             --with-ucx=${UCX} \
             --with-hcoll=${HCOLL} \
