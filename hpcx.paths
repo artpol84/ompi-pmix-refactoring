@@ -1,0 +1,18 @@
+#!/bin/bash
+
+hpcx=/global/home/users/tomislavj/dpu-experiment/hpcx-v2.7.0-gcc-MLNX_OFED_LINUX-5.1-0.6.6.0-redhat7.8-x86_64
+
+ucx=${hpcx}/ucx
+hcoll=${hpcx}/hcoll
+
+export UCX=${ucx}
+export PATH=${ucx}/bin:$PATH
+export LD_LIBRARY_PATH=${ucx}/lib:${ucx}/lib/ucx:$LD_LIBRARY_PATH
+export CPATH=${ucx}/lib:${ucx}/lib/hcoll:$CPATH
+echo ${UCX}
+
+export HCOLL=${hcoll}
+export PATH=${hcoll}/bin:$PATH
+export LD_LIBRARY_PATH=${hcoll}/lib:${hcoll}/lib/hcoll:$LD_LIBRARY_PATH
+export CPATH=${hcoll}/lib:${hcoll}/lib/hcoll:$CPATH
+echo ${HCOLL}
