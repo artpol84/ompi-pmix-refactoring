@@ -1,14 +1,15 @@
 #!/bin/bash
 
-if [[ -z "${UCX}" ]]; then
+#if [[ -z "${UCX}" ]]; then
 source ./hpcx.paths
-fi
+#fi
 
-echo "PATH = $PATH"
-echo "LD_LIBRARY_PATH = $LD_LIBRARY_PATH"
+echo "PATH=$PATH"
+echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"
 
 ./configure --prefix=`pwd`/install-rel \
             --with-ucx=${UCX} \
+            --with-ucx-libdir=${UCX}/lib \
             --with-hcoll=${HCOLL} \
             --with-pmix=internal \
             --enable-mca-no-build=coll-ml,btl-uct \

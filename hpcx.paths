@@ -1,7 +1,7 @@
 #!/bin/bash
 
 hpcx=/opt/hpcx-v2.7.0-gcc-MLNX_OFED_LINUX-5.1-0.6.6.0-ubuntu20.04-x86_64
-echo "hpcx = ${hpcx}"
+echo "hpcx=${hpcx}"
 
 ucx=${hpcx}/ucx
 hcoll=${hpcx}/hcoll
@@ -10,10 +10,10 @@ export UCX=${ucx}
 export PATH=${ucx}/bin:$PATH
 export LD_LIBRARY_PATH=${ucx}/lib:${ucx}/lib/ucx:$LD_LIBRARY_PATH
 export CPATH=${ucx}/lib:${ucx}/lib/hcoll:$CPATH
-echo "UCX = ${UCX}"
+echo "UCX=${UCX}"
 
 export HCOLL=${hcoll}
 export PATH=${hcoll}/bin:$PATH
 export LD_LIBRARY_PATH=${hcoll}/lib:${hcoll}/lib/hcoll:$LD_LIBRARY_PATH
 export CPATH=${hcoll}/lib:${hcoll}/lib/hcoll:$CPATH
-echo "HCOLL = ${HCOLL}"
+echo "HCOLL=${HCOLL}"
