@@ -1,6 +1,6 @@
 #!/bin/bash
 
-hpcx=/tmp/hpcx-v2.7.0-gcc-MLNX_OFED_LINUX-5.1-0.6.6.0-ubuntu20.04-x86_64
+hpcx=/opt/hpcx-v2.7.0-gcc-MLNX_OFED_LINUX-5.1-0.6.6.0-ubuntu20.04-x86_64
 
 ucx=${hpcx}/ucx
 hcoll=${hpcx}/hcoll
